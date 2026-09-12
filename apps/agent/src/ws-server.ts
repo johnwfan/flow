@@ -48,7 +48,16 @@ export class AgentWsServer {
 
   /** Broadcast a message to all connected clients */
   broadcast(msg: WsMessage): void {
-    const data = JSON.stringify(msg);
+    this.broadcastRaw(msg);
+  }
+
+  /**
+   * Broadcast an arbitrary JSON object outside the frozen WsMessage
+   * contract — for agent-side diagnostics only (e.g. SDK framing hints).
+   * Never use this for anything Lane B's UI is expected to rely on.
+   */
+  broadcastRaw(obj: unknown): void {
+    const data = JSON.stringify(obj);
     for (const ws of this.clients) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(data);

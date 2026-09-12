@@ -139,6 +139,10 @@ async function startEmitting(): Promise<void> {
         apiKey,
         cameraIndex,
         onSample: handleSample,
+        onValidation: (code, hint) => {
+          // Diagnostic-only, outside the frozen WsMessage contract
+          server.broadcastRaw({ kind: "debug_validation", code, hint, ts: Date.now() });
+        },
       });
       const ok = await sdkAdapter.init();
       if (!ok) {
@@ -169,6 +173,18 @@ function stopEmitting(): void {
     sdkAdapter.stop().catch((err) => console.error("[agent] SDK stop error:", err));
   }
 }
+
+// ── Crash safety net ──────────────────────────────────────────────
+// The native SmartSpectra binding can throw synchronously from
+// unexpected callback paths (camera contention, driver hiccups). Losing
+// the whole agent mid-demo is worse than losing one bad frame — log and
+// keep running rather than let an uncaught native error kill the process.
+process.on("uncaughtException", (err) => {
+  console.error(`[agent] uncaught exception (continuing): ${err.message}`);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[agent] unhandled rejection (continuing): ${reason}`);
+});
 
 // ── Startup ────────────────────────────────────────────────────────
 logBanner();

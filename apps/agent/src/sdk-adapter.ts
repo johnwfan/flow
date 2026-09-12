@@ -10,6 +10,7 @@ import type { SampleMessage } from "@flow/shared";
 export class SdkAdapter {
   private sdk: any = null;
   private onSample: (sample: SampleMessage) => void;
+  private onValidation?: (code: number, hint: string) => void;
   private running = false;
   private apiKey: string;
   private cameraIndex: number;
@@ -18,10 +19,13 @@ export class SdkAdapter {
     apiKey: string;
     cameraIndex?: number;
     onSample: (sample: SampleMessage) => void;
+    /** SDK framing/quality hints (e.g. "Place more of the chest in view") */
+    onValidation?: (code: number, hint: string) => void;
   }) {
     this.apiKey = opts.apiKey;
     this.cameraIndex = opts.cameraIndex ?? 0;
     this.onSample = opts.onSample;
+    this.onValidation = opts.onValidation;
   }
 
   async init(): Promise<boolean> {
@@ -64,6 +68,7 @@ export class SdkAdapter {
       this.sdk.on("validationStatus", (code: number, _ts: number, hint: string) => {
         if (code !== 0) {
           console.log(`[sdk] validation: ${hint} (code=${code})`);
+          this.onValidation?.(code, hint);
         }
       });
 
@@ -92,10 +97,22 @@ export class SdkAdapter {
       console.error("[sdk] not initialized — call init() first");
       return;
     }
-    this.sdk.useCamera({ deviceIndex: this.cameraIndex });
-    this.sdk.start();
-    this.running = true;
-    console.log("[sdk] camera capture started");
+    if (this.running) {
+      console.warn("[sdk] start() called while already running — ignoring duplicate start");
+      return;
+    }
+    try {
+      this.sdk.useCamera({ deviceIndex: this.cameraIndex });
+      this.sdk.start();
+      this.running = true;
+      console.log("[sdk] camera capture started");
+    } catch (err: any) {
+      // The native binding throws synchronously (e.g. camera already in use
+      // by another process, or a duplicate start reaching the native layer).
+      // Never let this crash the whole agent process mid-session.
+      console.error(`[sdk] start failed: ${err.message} — is another app using the camera?`);
+      this.running = false;
+    }
   }
 
   async stop(): Promise<void> {
