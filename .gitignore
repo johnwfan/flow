@@ -1,4 +1,8 @@
 
+# ── Agent runtime ──
+.flow-device-id
+.turbo/
+
 # ── GSD baseline (auto-generated) ──
 .gsd
 .gsd-worktrees/
