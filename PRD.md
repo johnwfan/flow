@@ -60,8 +60,7 @@ Sessions per user per week. Percentage of alerts acted on versus dismissed. Time
 | Dashboard charts | Recharts | Static data, better ergonomics. Right tool, different job. |
 | API | Fastify on Node | Same language and types as the agent. Persistent container means one connection pool, which serverless can't give you. |
 | Database | Tiger Cloud | Physiology is textbook hypertable data — high-frequency, append-only, time-ordered. Continuous aggregates serve the dashboard without recomputation. A 45-min session at 20 Hz is 54,000 rows. |
-| API hosting | Vultr — Docker + Caddy | Always-on, no cold start mid-demo. Caddy handles TLS in three lines. Same region as Tiger Cloud. |
-| Frontend hosting | Vercel | Dashboard only. `/session` runs from localhost to avoid mixed-content blocking on `ws://localhost`. |
+| API + frontend hosting | Vultr — Docker + Caddy | Single VM at tryflow.study serves both API and frontend. No Vercel — eliminates deploy complexity and mixed-content `ws://localhost` issues. Caddy handles TLS in three lines. Same region as Tiger Cloud. |
 | LLM | Gemini via Backboard | One integration surface, two sponsor tracks. Persistent per-device memory means the coach references prior sessions. |
 | Voice | ElevenLabs, server-proxied | Key never reaches the browser. Fixed nudge lines pre-cached as files so the demo doesn't depend on a live call. |
 

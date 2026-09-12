@@ -16,10 +16,15 @@ export class Session {
 
   private warmupTimer: ReturnType<typeof setTimeout> | null = null;
   private onStateChange?: (state: StateMessage) => void;
+  private onWarmupComplete?: () => void;
 
-  constructor(opts?: { onStateChange?: (state: StateMessage) => void }) {
+  constructor(opts?: {
+    onStateChange?: (state: StateMessage) => void;
+    onWarmupComplete?: () => void;
+  }) {
     this.deviceId = Session.loadOrCreateDeviceId();
     this.onStateChange = opts?.onStateChange;
+    this.onWarmupComplete = opts?.onWarmupComplete;
     console.log(`[session] device_id: ${this.deviceId}`);
   }
 
@@ -57,6 +62,7 @@ export class Session {
         this.phase = "active";
         console.log("[session] warmup complete — active");
         this.emitState(State.Focused, ["warmup_complete"]);
+        if (this.onWarmupComplete) this.onWarmupComplete();
       }
     }, 4 * 60 * 1000);
   }

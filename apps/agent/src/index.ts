@@ -2,6 +2,7 @@ import { AgentWsServer } from "./ws-server.js";
 import { MockEmitter } from "./mock-emitter.js";
 import { SdkAdapter } from "./sdk-adapter.js";
 import { Session } from "./session.js";
+import { Pipeline } from "./pipeline.js";
 import { logBanner, logConfig, logSample, logShutdown } from "./logger.js";
 import type { SampleMessage, StateMessage } from "@flow/shared";
 
@@ -26,10 +27,18 @@ const port = portIdx >= 0 ? parseInt(args[portIdx + 1]!, 10) : 8765;
 const camIdx = args.indexOf("--camera");
 const cameraIndex = camIdx >= 0 ? parseInt(args[camIdx + 1]!, 10) : 0;
 
+// ── Pipeline (classifier, baseline, window tracker, probes) ───────
+const pipeline = new Pipeline({
+  broadcast: (msg) => server.broadcast(msg),
+});
+
 // ── Session ────────────────────────────────────────────────────────
 const session = new Session({
   onStateChange: (state: StateMessage) => {
     server.broadcast(state);
+  },
+  onWarmupComplete: () => {
+    pipeline.onWarmupComplete();
   },
 });
 
@@ -39,11 +48,12 @@ const server = new AgentWsServer({
   onSessionControl: (msg) => {
     session.handleControl(msg);
 
-    // Start/stop emitter based on session phase
     if (msg.action === "start") {
+      pipeline.startTracking();
       startEmitting();
     } else if (msg.action === "end") {
       stopEmitting();
+      pipeline.stop();
     } else if (msg.action === "pause") {
       stopEmitting();
     } else if (msg.action === "resume") {
@@ -55,6 +65,11 @@ const server = new AgentWsServer({
 // ── Sample handler ─────────────────────────────────────────────────
 function handleSample(sample: SampleMessage): void {
   if (!session.shouldEmit) return;
+
+  // Route through pipeline (baseline → classifier → alerts)
+  pipeline.processSample(sample);
+
+  // Broadcast to WS clients
   server.broadcast(sample);
   logSample();
 }
@@ -121,6 +136,7 @@ console.log("[agent] ready — waiting for session_control start message");
 async function shutdown(): Promise<void> {
   logShutdown();
   stopEmitting();
+  pipeline.stop();
   if (sdkAdapter) await sdkAdapter.destroy();
   await server.close();
   process.exit(0);
