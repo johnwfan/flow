@@ -1,8 +1,9 @@
-import type { SampleMessage, StateMessage, AlertMessage, AppContextMessage, ThoughtProbeMessage, WsMessage } from "@flow/shared";
+import type { SampleMessage, StateMessage, AlertMessage, AppContextMessage, ThoughtProbeMessage, BreathingGuideMessage, WsMessage } from "@flow/shared";
 import { BaselineCollector } from "./baseline.js";
 import { Classifier } from "./classifier.js";
 import { WindowTracker } from "./window-tracker.js";
 import { ProbeScheduler } from "./probe-scheduler.js";
+import { BreathingGuideScheduler } from "./breathing-guide.js";
 import { RingBuffer } from "./ring-buffer.js";
 import { watchThresholds } from "./thresholds.js";
 
@@ -19,9 +20,13 @@ export class Pipeline {
   private classifier: Classifier | null = null;
   private windowTracker: WindowTracker;
   private probeScheduler: ProbeScheduler | null = null;
+  private breathingGuide: BreathingGuideScheduler;
 
   /** Ring buffer for upload batching (30s at 20Hz = 600 samples) */
   readonly uploadBuffer = new RingBuffer<SampleMessage>(600);
+
+  /** Rolling recent breathing-rate samples, used to pace the breathing guide */
+  private recentBreathingRates: number[] = [];
 
   private warmupComplete = false;
   private callbacks: PipelineCallbacks;
@@ -41,8 +46,24 @@ export class Pipeline {
       },
     });
 
+    this.breathingGuide = new BreathingGuideScheduler({
+      getCurrentRpm: () => this.getCurrentBreathingRpm(),
+      callbacks: {
+        onPhase: (msg: BreathingGuideMessage) => {
+          callbacks.broadcast(msg);
+        },
+      },
+    });
+
     // Start watching thresholds for hot-reload
     watchThresholds();
+  }
+
+  /** Rolling average of recent measured breathing rate (RPM), 0 if none yet. */
+  private getCurrentBreathingRpm(): number {
+    if (this.recentBreathingRates.length === 0) return 0;
+    const sum = this.recentBreathingRates.reduce((a, b) => a + b, 0);
+    return sum / this.recentBreathingRates.length;
   }
 
   /** Called by session when warmup ends — freeze baseline and start classifier */
@@ -63,6 +84,9 @@ export class Pipeline {
         if (this.probeScheduler) {
           this.probeScheduler.suppressPostAlert();
         }
+        // Paced breathing guide is part of the intervention for both
+        // alert types — zone-out (re-engage) and spiral (calm down)
+        this.breathingGuide.start();
       },
     });
     this.classifier.start();
@@ -87,6 +111,13 @@ export class Pipeline {
     // Always buffer for upload
     this.uploadBuffer.push(sample);
 
+    // Track recent breathing rate for guide pacing (last ~20s at 1 sample/s
+    // worth of readings — breathing_rpm updates far slower than 20Hz anyway)
+    if (sample.breathing_rpm != null) {
+      this.recentBreathingRates.push(sample.breathing_rpm);
+      if (this.recentBreathingRates.length > 20) this.recentBreathingRates.shift();
+    }
+
     if (!this.warmupComplete) {
       // During warmup: collect baseline
       this.baseline.addSample(sample);
@@ -106,6 +137,7 @@ export class Pipeline {
     this.classifier?.stop();
     this.windowTracker.stop();
     this.probeScheduler?.stop();
+    this.breathingGuide.stop();
   }
 
   /** Reset for a new session */
@@ -116,5 +148,6 @@ export class Pipeline {
     this.probeScheduler = null;
     this.warmupComplete = false;
     this.uploadBuffer.clear();
+    this.recentBreathingRates = [];
   }
 }

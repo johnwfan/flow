@@ -6,8 +6,9 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node --esm src/index.ts --mock",
-    "dev:real": "ts-node --esm src/index.ts --real",
+    "dev": "tsx src/index.ts --mock",
+    "dev:real": "tsx src/index.ts --real",
+    "dev:demo": "tsx src/index.ts --demo",
     "start": "node dist/index.js --mock",
     "start:real": "node dist/index.js --real",
     "clean": "rm -rf dist"
@@ -15,12 +16,13 @@
   "dependencies": {
     "@flow/shared": "workspace:*",
     "@smartspectra/node-sdk": "^3.3.0",
-    "dotenv": "^17.4.2",
+    "dotenv": "16.4.5",
     "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
     "ts-node": "^10.9.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.5.0"
   }
 }

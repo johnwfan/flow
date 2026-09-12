@@ -25,10 +25,20 @@ export interface ClassifierThresholds {
   confidence_threshold: number;
 }
 
+export interface BreathingGuideThresholds {
+  /** exhale/inhale ratio — >1 nudges toward a calmer, longer exhale */
+  ie_ratio: number;
+  /** number of inhale+exhale cycles per guided sequence */
+  cycles: number;
+  /** RPM to assume if no measured breathing rate is available yet */
+  fallback_rpm: number;
+}
+
 export interface Thresholds {
   zone_out: ZoneOutThresholds;
   spiral: SpiralThresholds;
   classifier: ClassifierThresholds;
+  breathing_guide: BreathingGuideThresholds;
 }
 
 // Resolve thresholds.json: check agent package root (../thresholds.json from src/ or dist/)
@@ -79,6 +89,11 @@ function getDefaults(): Thresholds {
       eval_interval_ms: 1000,
       hysteresis_s: 5,
       confidence_threshold: 0.5,
+    },
+    breathing_guide: {
+      ie_ratio: 1.5,
+      cycles: 3,
+      fallback_rpm: 12,
     },
   };
 }

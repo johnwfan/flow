@@ -21,13 +21,36 @@
 - [x] **S01: Foundation and Infrastructure** — monorepo, Tiger Cloud schema, Vultr VM, Docker/Caddy, `@flow/shared` types
 - [x] **S02: Agent Core and Sensing** — WS server, mock emitter, SmartSpectra SDK adapter, session lifecycle
 - [x] **S03: Live Session UI** — waveforms, session controls, state display
-- [x] **S04: Classifier, Context, and Probes** `risk:high` — see below, in progress
-- [x] **S05: Persistence and API Foundation** — Tiger Cloud writes, offline buffer, base API routes
-- [ ] **S06: Intervention and Voice** `risk:medium` `depends:[S03,S04]`
-  > After this: Zone-out alert shows card with three buttons, breathing guide animates at measured breathing rate with live I:E before and after, voice cue plays within 1s of alert, mute toggle silences voice but keeps visual, pre-cached fallback works when ElevenLabs is down
-- [x] **S07: Dashboard and Insights** — session history, Gemini narrative, cross-session insight cards, confusion matrix
-- [ ] **S08: Demo Mode, Seed Data, and Polish** `risk:low` `depends:[S06,S07]`
-  > After this: Demo button in UI replays pre-recorded session convincingly, seed script populates 5-7 realistic sessions on dashboard, run.bat launches agent with one double-click, scripted 2-minute demo rehearsed successfully
+- [x] **S04: Classifier, Context, and Probes** `risk:high` — see below, done
+- [ ] **S05: Persistence and API Foundation** — Lane B (`apps/api/`). **Not actually built yet** — despite earlier tracking, `apps/api/src/index.ts` is still the Fastify hello-world scaffold, no `/v1/*` routes exist.
+- [x] **S06: Intervention and Voice** (Lane A portion only — see below)
+- [ ] **S07: Dashboard and Insights** — Lane B (`apps/web/`). **Not actually built yet** — `apps/web/src/app` is still the Next.js hello-world scaffold, no `/dashboard`, `/insights`, `/validation`, or `/session` routes exist.
+- [x] **S08: Demo Mode, Seed Data, and Polish** (Lane A portion only — see below)
+
+> **Lane split (see `LANE-B-HANDOFF.md`):** Lane A owns `apps/agent/` only. Lane B owns `infra/`, `apps/api/`, `apps/web/`. Per instruction, this pass completed Lane A's remaining work and left Lane B's slices (S05, S07, and the Lane B halves of S06/S08) untouched for the other dev/session to build.
+
+### S06: Intervention and Voice — Lane A portion (done)
+
+**Lane A scope:** the agent must emit `BreathingGuideMessage` (phase, duration_ms, measured_rpm, ie_ratio) so the UI can animate a paced breathing guide — everything else in S06 (alert card UI, voice trigger, `/v1/speak` ElevenLabs proxy, mute toggle, pre-cached fallback audio) is Lane B.
+
+- [x] `apps/agent/src/breathing-guide.ts` — paces inhale/exhale off the rolling measured breathing rate, nudged toward a calmer exhale (`ie_ratio`, default 1.5, hot-reloadable via `thresholds.json`)
+- [x] Wired into `pipeline.ts` — starts automatically when a zone-out or spiral alert fires, runs `cycles` (default 3) inhale/exhale pairs, then stops
+- [x] Verified end-to-end: alert → breathing_guide messages broadcast over WS
+
+**Still needed (Lane B):** alert card component with 3 buttons, breathing guide animation, voice cue playback + mute toggle, `/v1/speak` proxy, pre-cached fallback audio files.
+
+### S08: Demo Mode, Seed Data, and Polish — Lane A portion (done)
+
+**Lane A scope:** the replay engine for R012 (agent-side, same WS contract), and R011 (run.bat + rotating log, agent-side). R013 (seed data for the dashboard DB) is Lane B — skipped.
+
+- [x] `apps/agent/src/demo-emitter.ts` — replays a JSONL capture (`{atMs, message}` per line) through the same WS broadcast path as live/mock, at original relative timing
+- [x] `apps/agent/scripts/generate-demo.ts` + `apps/agent/demo-data/session-01.jsonl` — curated ~2min narrative: warmup → focused → zone-out episode → breathing-guide intervention → recovery → thought probe, full 20Hz sample stream throughout
+- [x] `--demo [file]` CLI flag on the agent, `pnpm dev:demo` script
+- [x] Rotating file log (`apps/agent/src/logger.ts` `initFileLogging`) — writes `apps/agent/logs/agent-<timestamp>.log`, keeps last 10 runs
+- [x] `run.bat` now launches `--real` (live camera) by default; new `run-demo.bat` for the safety-net fallback
+- [x] Verified end-to-end: demo replay fires narrative messages at correct offsets over WS
+
+**Still needed (Lane B):** the actual UI "demo mode" toggle button, seed data script for the dashboard database (R013).
 
 ### S04: Classifier, Context, and Probes (current)
 
