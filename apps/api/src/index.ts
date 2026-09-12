@@ -2,10 +2,13 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { State } from "@flow/shared";
 import { pool } from "./db.js";
+import { registerIngestRoutes } from "./ingest.js";
 
 const app = Fastify({ logger: true });
 
 await app.register(cors);
+
+registerIngestRoutes(app);
 
 app.get("/health", async () => {
   return { status: "ok", defaultState: State.Warmup };
