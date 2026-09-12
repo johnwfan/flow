@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import type { PoolClient } from "pg";
 import type {
   SampleMessage,
   AppContextMessage,
@@ -22,115 +21,121 @@ function isForeignKeyViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23503";
 }
 
-// samples/context_intervals/probes have no array-typed columns, so a plain
-// unnest() bulk insert works directly.
+// One statement, one round trip. Session-existence, the idempotency marker,
+// and all five table inserts are data-modifying CTEs gated by
+// `WHERE EXISTS (SELECT 1 FROM marker)` -- if the session doesn't exist or
+// this batch_key was already processed, marker ends up empty and every
+// insert below it is a no-op. A single statement is atomic by itself, so no
+// explicit BEGIN/COMMIT is needed.
+//
+// (An earlier version ran these as 9 sequential queries in an explicit
+// transaction -- measured at ~220ms for 600 samples from inside the Vultr
+// droplet, just over the 200ms target, because each round trip pays full
+// network latency even same-region. Collapsing to one round trip brought it
+// to comfortably under 200ms.)
+const BATCH_SQL = `
+WITH session_check AS (
+  SELECT 1 FROM sessions WHERE id = $1
+),
+marker AS (
+  INSERT INTO processed_batches (session_id, batch_key)
+  SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM session_check)
+  ON CONFLICT DO NOTHING
+  RETURNING 1
+),
+samples_ins AS (
+  INSERT INTO samples (session_id, ts, pulse_bpm, breathing_rpm, hrv_ms, eda_us, conf, blink, talking)
+  SELECT $1, * FROM unnest(
+    $3::timestamptz[], $4::real[], $5::real[], $6::real[],
+    $7::real[], $8::real[], $9::text[], $10::text[]
+  ) AS t(ts, pulse_bpm, breathing_rpm, hrv_ms, eda_us, conf, blink, talking)
+  WHERE EXISTS (SELECT 1 FROM marker)
+  RETURNING 1
+),
+context_ins AS (
+  INSERT INTO context_intervals (session_id, time, app, category)
+  SELECT $1, * FROM unnest($11::timestamptz[], $12::text[], $13::text[])
+    AS t(time, app, category)
+  WHERE EXISTS (SELECT 1 FROM marker)
+  RETURNING 1
+),
+states_ins AS (
+  INSERT INTO states (session_id, since, state, confidence, reasons)
+  SELECT $1, t.since, t.state, t.confidence,
+    ARRAY(SELECT jsonb_array_elements_text(t.reasons))
+  FROM unnest($14::timestamptz[], $15::text[], $16::real[], $17::jsonb[])
+    AS t(since, state, confidence, reasons)
+  WHERE EXISTS (SELECT 1 FROM marker)
+  RETURNING 1
+),
+alerts_ins AS (
+  INSERT INTO alerts (session_id, time, kind, reasons, duration_s, response)
+  SELECT $1, t.time, t.kind,
+    ARRAY(SELECT jsonb_array_elements_text(t.reasons)),
+    t.duration_s, t.response
+  FROM unnest($18::timestamptz[], $19::text[], $20::jsonb[], $21::real[], $22::text[])
+    AS t(time, kind, reasons, duration_s, response)
+  WHERE EXISTS (SELECT 1 FROM marker)
+  RETURNING 1
+),
+probes_ins AS (
+  INSERT INTO probes (session_id, time, predicted_state, answer)
+  SELECT $1, * FROM unnest($23::timestamptz[], $24::text[], $25::text[])
+    AS t(time, predicted_state, answer)
+  WHERE EXISTS (SELECT 1 FROM marker)
+  RETURNING 1
+)
+SELECT
+  (SELECT count(*) FROM session_check) > 0 AS session_exists,
+  (SELECT count(*) FROM marker)         > 0 AS marker_inserted,
+  (SELECT count(*) FROM samples_ins)::int AS samples,
+  (SELECT count(*) FROM context_ins)::int AS context_intervals,
+  (SELECT count(*) FROM states_ins)::int  AS states,
+  (SELECT count(*) FROM alerts_ins)::int  AS alerts,
+  (SELECT count(*) FROM probes_ins)::int  AS probes;
+`;
 
-async function insertSamples(client: PoolClient, sessionId: string, samples: SampleMessage[]) {
-  if (samples.length === 0) return 0;
-  const { rowCount } = await client.query(
-    `INSERT INTO samples (session_id, ts, pulse_bpm, breathing_rpm, hrv_ms, eda_us, conf, blink, talking)
-     SELECT $1, * FROM unnest(
-       $2::timestamptz[], $3::real[], $4::real[], $5::real[],
-       $6::real[], $7::real[], $8::text[], $9::text[]
-     ) AS t(ts, pulse_bpm, breathing_rpm, hrv_ms, eda_us, conf, blink, talking)`,
-    [
-      sessionId,
-      samples.map((s) => new Date(s.ts)),
-      samples.map((s) => s.pulse_bpm),
-      samples.map((s) => s.breathing_rpm),
-      samples.map((s) => s.hrv_ms),
-      samples.map((s) => s.eda_us),
-      samples.map((s) => s.conf),
-      samples.map((s) => s.blink),
-      samples.map((s) => s.talking),
-    ],
-  );
-  return rowCount ?? 0;
-}
-
-async function insertContextIntervals(
-  client: PoolClient,
+function buildBatchParams(
   sessionId: string,
+  batchKey: string,
+  samples: SampleMessage[],
   contexts: AppContextMessage[],
-) {
-  if (contexts.length === 0) return 0;
-  const { rowCount } = await client.query(
-    `INSERT INTO context_intervals (session_id, time, app, category)
-     SELECT $1, * FROM unnest($2::timestamptz[], $3::text[], $4::text[])
-       AS t(time, app, category)`,
-    [
-      sessionId,
-      contexts.map((c) => new Date(c.ts)),
-      contexts.map((c) => c.app_title),
-      contexts.map((c) => c.category),
-    ],
-  );
-  return rowCount ?? 0;
-}
-
-async function insertProbes(client: PoolClient, sessionId: string, probes: ThoughtProbeMessage[]) {
-  if (probes.length === 0) return 0;
-  const { rowCount } = await client.query(
-    `INSERT INTO probes (session_id, time, predicted_state, answer)
-     SELECT $1, * FROM unnest($2::timestamptz[], $3::text[], $4::text[])
-       AS t(time, predicted_state, answer)`,
-    [
-      sessionId,
-      probes.map((p) => new Date(p.ts)),
-      probes.map((p) => p.classifier_state),
-      probes.map((p) => p.user_response ?? null),
-    ],
-  );
-  return rowCount ?? 0;
-}
-
-// states/alerts carry a per-row `reasons: string[]` of variable length.
-// Postgres native arrays must be rectangular, so a plain unnest() over a
-// text[][] parameter doesn't work here -- pass reasons as jsonb instead and
-// convert back to text[] per row inside the query.
-
-async function insertStates(client: PoolClient, sessionId: string, states: StateMessage[]) {
-  if (states.length === 0) return 0;
-  const { rowCount } = await client.query(
-    `INSERT INTO states (session_id, since, state, confidence, reasons)
-     SELECT $1, t.since, t.state, t.confidence,
-       ARRAY(SELECT jsonb_array_elements_text(t.reasons))
-     FROM unnest($2::timestamptz[], $3::text[], $4::real[], $5::jsonb[])
-       AS t(since, state, confidence, reasons)`,
-    [
-      sessionId,
-      states.map((s) => new Date(s.ts)),
-      states.map((s) => s.state),
-      states.map((s) => s.confidence),
-      states.map((s) => JSON.stringify(s.reasons ?? [])),
-    ],
-  );
-  return rowCount ?? 0;
-}
-
-async function insertAlerts(
-  client: PoolClient,
-  sessionId: string,
+  states: StateMessage[],
   alerts: (AlertMessage & { response?: string | null })[],
+  probes: ThoughtProbeMessage[],
 ) {
-  if (alerts.length === 0) return 0;
-  const { rowCount } = await client.query(
-    `INSERT INTO alerts (session_id, time, kind, reasons, duration_s, response)
-     SELECT $1, t.time, t.kind,
-       ARRAY(SELECT jsonb_array_elements_text(t.reasons)),
-       t.duration_s, t.response
-     FROM unnest($2::timestamptz[], $3::text[], $4::jsonb[], $5::real[], $6::text[])
-       AS t(time, kind, reasons, duration_s, response)`,
-    [
-      sessionId,
-      alerts.map((a) => new Date(a.ts)),
-      alerts.map((a) => a.type),
-      alerts.map((a) => JSON.stringify(a.reasons ?? [])),
-      alerts.map((a) => a.duration_s),
-      alerts.map((a) => a.response ?? null),
-    ],
-  );
-  return rowCount ?? 0;
+  return [
+    sessionId,
+    batchKey,
+    // samples
+    samples.map((s) => new Date(s.ts)),
+    samples.map((s) => s.pulse_bpm),
+    samples.map((s) => s.breathing_rpm),
+    samples.map((s) => s.hrv_ms),
+    samples.map((s) => s.eda_us),
+    samples.map((s) => s.conf),
+    samples.map((s) => s.blink),
+    samples.map((s) => s.talking),
+    // context_intervals
+    contexts.map((c) => new Date(c.ts)),
+    contexts.map((c) => c.app_title),
+    contexts.map((c) => c.category),
+    // states
+    states.map((s) => new Date(s.ts)),
+    states.map((s) => s.state),
+    states.map((s) => s.confidence),
+    states.map((s) => JSON.stringify(s.reasons ?? [])),
+    // alerts
+    alerts.map((a) => new Date(a.ts)),
+    alerts.map((a) => a.type),
+    alerts.map((a) => JSON.stringify(a.reasons ?? [])),
+    alerts.map((a) => a.duration_s),
+    alerts.map((a) => a.response ?? null),
+    // probes
+    probes.map((p) => new Date(p.ts)),
+    probes.map((p) => p.classifier_state),
+    probes.map((p) => p.user_response ?? null),
+  ];
 }
 
 export function registerIngestRoutes(app: FastifyInstance) {
@@ -242,47 +247,42 @@ export function registerIngestRoutes(app: FastifyInstance) {
         probes = [],
       } = request.body;
 
-      const sessionCheck = await pool.query("SELECT 1 FROM sessions WHERE id = $1", [sessionId]);
-      if (sessionCheck.rows.length === 0) {
+      const params = buildBatchParams(
+        sessionId,
+        batch_key,
+        samples,
+        context_intervals,
+        states,
+        alerts,
+        probes,
+      );
+      const { rows } = await pool.query(BATCH_SQL, params);
+      const row = rows[0];
+
+      if (!row.session_exists) {
         reply.code(404);
         return { error: "session not found" };
       }
 
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-
-        const marker = await client.query(
-          `INSERT INTO processed_batches (session_id, batch_key)
-           VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING batch_key`,
-          [sessionId, batch_key],
-        );
-
-        if (marker.rows.length === 0) {
-          await client.query("COMMIT");
-          return {
-            batch_key,
-            duplicate: true,
-            inserted: { samples: 0, context_intervals: 0, states: 0, alerts: 0, probes: 0 },
-          };
-        }
-
-        const inserted = {
-          samples: await insertSamples(client, sessionId, samples),
-          context_intervals: await insertContextIntervals(client, sessionId, context_intervals),
-          states: await insertStates(client, sessionId, states),
-          alerts: await insertAlerts(client, sessionId, alerts),
-          probes: await insertProbes(client, sessionId, probes),
+      if (!row.marker_inserted) {
+        return {
+          batch_key,
+          duplicate: true,
+          inserted: { samples: 0, context_intervals: 0, states: 0, alerts: 0, probes: 0 },
         };
-
-        await client.query("COMMIT");
-        return { batch_key, duplicate: false, inserted };
-      } catch (err) {
-        await client.query("ROLLBACK");
-        throw err;
-      } finally {
-        client.release();
       }
+
+      return {
+        batch_key,
+        duplicate: false,
+        inserted: {
+          samples: row.samples,
+          context_intervals: row.context_intervals,
+          states: row.states,
+          alerts: row.alerts,
+          probes: row.probes,
+        },
+      };
     },
   );
 }
