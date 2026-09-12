@@ -1,0 +1,14 @@
+# No domain is pointed at this droplet yet, so serve plain HTTP on the raw IP
+# for now. Once a domain is pointed here, uncomment the block below (and
+# remove/adjust this one) to get automatic Let's Encrypt HTTPS with zero other
+# changes — just `docker compose exec caddy caddy reload` after editing.
+:80 {
+	route {
+		reverse_proxy /v1/* app:3001
+		respond "Flow API — see /v1/health" 200
+	}
+}
+
+# your-domain.example {
+# 	reverse_proxy /v1/* app:3001
+# }
