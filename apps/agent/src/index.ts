@@ -1,3 +1,6 @@
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import dotenv from "dotenv";
 import { AgentWsServer } from "./ws-server.js";
 import { MockEmitter } from "./mock-emitter.js";
 import { SdkAdapter } from "./sdk-adapter.js";
@@ -5,6 +8,13 @@ import { Session } from "./session.js";
 import { Pipeline } from "./pipeline.js";
 import { logBanner, logConfig, logSample, logShutdown } from "./logger.js";
 import type { SampleMessage, StateMessage } from "@flow/shared";
+
+// ── Env ────────────────────────────────────────────────────────────
+// Resolve .env relative to this file (apps/agent/.env), not process.cwd(),
+// so it loads the same whether launched via run.bat (cwd = repo root),
+// `pnpm dev:real` (cwd = apps/agent), or `node dist/index.js`.
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(scriptDir, "..", ".env") });
 
 // ── CLI args ───────────────────────────────────────────────────────
 const args = process.argv.slice(2);
