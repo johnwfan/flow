@@ -96,8 +96,19 @@ export class UploadScheduler {
       return;
     }
 
+    // landmarks/expressions are a full facial point cloud per sample --
+    // apps/api's insertBatch only ever reads pulse/breathing/hrv/eda/conf/
+    // blink/talking (see batchInsert.ts), so this data is parsed on
+    // arrival and immediately discarded server-side. Uploading it anyway
+    // was inflating batches well past Fastify's default 1MB body limit
+    // (intermittent 413s) and, worse, big enough to crash/stall the API
+    // process under repeated load (the 502s that led here). The live WS
+    // broadcast to the browser still carries the full sample -- this only
+    // trims the persisted copy.
+    const uploadSamples = samples.map((s) => ({ ...s, landmarks: null, expressions: null }));
+
     this.api.queueBatch(sessionId, {
-      samples,
+      samples: uploadSamples,
       events: this.events,
       contexts: this.contexts,
       probes: this.probes,

@@ -50,6 +50,10 @@ export class ApiClient {
     mkdirSync(opts.spillDir, { recursive: true });
     this.spillPath = join(opts.spillDir, "pending-batches.jsonl");
     this.loadSpill();
+    // A backlog from a previous run otherwise sits inert until the next
+    // queueBatch() call (i.e. a whole new session) -- start draining it
+    // now instead of leaving old data stranded indefinitely.
+    if (this.pending.length > 0) this.trySendAll();
   }
 
   private loadSpill(): void {
