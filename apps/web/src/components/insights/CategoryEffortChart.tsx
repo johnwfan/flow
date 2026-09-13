@@ -1,45 +1,38 @@
-"use client";
-
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { CategoryEffort } from "@/types/api";
-import { categoryColor, categoryLabel, chartChrome } from "@/lib/colors";
+import { categoryLabel } from "@/lib/colors";
+import { NotEnoughData } from "@/components/ui/NotEnoughData";
+import { MIN_SESSIONS_FOR_PATTERN } from "@/lib/patterns";
+import { BarsList, CAT_VARS } from "./BarsList";
+import { WrittenForYou } from "./WrittenForYou";
 
-export function CategoryEffortChart({ data }: { data: CategoryEffort[] }) {
-  if (data.length === 0) {
-    return <p className="text-sm text-muted">No categorized app time recorded yet.</p>;
-  }
+const PLACEHOLDER_HEIGHT = 180;
 
-  const sorted = [...data].sort((a, b) => b.minutes - a.minutes);
+function effortNote(data: CategoryEffort[], sessionCount: number): string {
+  const top = data[0];
+  if (!top) return "Not enough categorized app time yet to say where your effort goes.";
+  const total = data.reduce((sum, d) => sum + d.minutes, 0);
+  const share = total > 0 ? Math.round((top.minutes / total) * 100) : 0;
+  return `${categoryLabel(top.category)} carries the most of your tracked effort -- ${Math.round(top.minutes)} minute${Math.round(top.minutes) === 1 ? "" : "s"} (${share}%) across ${sessionCount} session${sessionCount === 1 ? "" : "s"}.`;
+}
+
+export function CategoryEffortChart({ data, sessionCount }: { data: CategoryEffort[]; sessionCount: number }) {
+  const hasEnough = data.length > 0 && sessionCount >= MIN_SESSIONS_FOR_PATTERN;
 
   return (
-    <ResponsiveContainer width="100%" height={Math.max(120, sorted.length * 36)}>
-      <BarChart data={sorted} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke={chartChrome.gridline} horizontal={false} />
-        <XAxis
-          type="number"
-          tickFormatter={(v: number) => `${v}m`}
-          stroke={chartChrome.axis}
-          tick={{ fontSize: 11, fill: chartChrome.mutedText }}
+    <div>
+      {hasEnough ? (
+        <BarsList
+          items={data.map((d, i) => ({
+            label: categoryLabel(d.category),
+            value: `${Math.round(d.minutes)}m`,
+            pct: Math.max(4, Math.round((d.minutes / data[0]!.minutes) * 100)),
+            colorVar: CAT_VARS[Math.min(i, CAT_VARS.length - 1)]!,
+          }))}
         />
-        <YAxis
-          type="category"
-          dataKey="category"
-          tickFormatter={(c: string) => categoryLabel(c)}
-          stroke={chartChrome.axis}
-          tick={{ fontSize: 12, fill: chartChrome.primaryText }}
-          width={100}
-        />
-        <Tooltip
-          formatter={(v: number) => [`${v}m`, "time"]}
-          labelFormatter={(c: string) => categoryLabel(c)}
-          contentStyle={{ borderColor: chartChrome.gridline, fontSize: 12 }}
-        />
-        <Bar dataKey="minutes" radius={[0, 4, 4, 0]} isAnimationActive={false}>
-          {sorted.map((entry, i) => (
-            <Cell key={i} fill={categoryColor(entry.category)} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+      ) : (
+        <NotEnoughData height={PLACEHOLDER_HEIGHT} have={sessionCount} need={MIN_SESSIONS_FOR_PATTERN} />
+      )}
+      <WrittenForYou text={effortNote(data, sessionCount)} />
+    </div>
   );
 }

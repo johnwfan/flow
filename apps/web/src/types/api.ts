@@ -98,6 +98,13 @@ export interface ValidationResult {
   falseAlarmRate: number;
 }
 
+export interface DistractionPattern {
+  appTitle: string | null;
+  category: string | null;
+  minutes: number;
+  episodes: number;
+}
+
 export interface Insights {
   focusWindow: FocusWindow;
   effortByCategory: CategoryEffort[];
@@ -105,4 +112,5 @@ export interface Insights {
   breakQuality: BreakQuality;
   interventionEfficacy: InterventionEfficacyPoint[];
   validation: ValidationResult;
+  distractionPatterns: DistractionPattern[];
 }

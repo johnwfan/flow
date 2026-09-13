@@ -7,21 +7,38 @@ import {
   computeSettleTrend,
   computeValidation,
 } from "../lib/insights.js";
+import { computeCrossSessionDistractionPattern } from "../lib/sessionInsights.js";
 
 export async function insightsRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { deviceId?: string } }>("/v1/insights", async (request) => {
     const { deviceId } = request.query;
 
-    const [focusWindow, effortByCategory, settleTrend, breakQuality, interventionEfficacy, validation] =
-      await Promise.all([
-        computeFocusWindow(app.pg, deviceId),
-        computeEffortByCategory(app.pg, deviceId),
-        computeSettleTrend(app.pg, deviceId),
-        computeBreakQuality(app.pg, deviceId),
-        computeInterventionEfficacy(app.pg, deviceId),
-        computeValidation(app.pg, deviceId),
-      ]);
+    const [
+      focusWindow,
+      effortByCategory,
+      settleTrend,
+      breakQuality,
+      interventionEfficacy,
+      validation,
+      distractionPatterns,
+    ] = await Promise.all([
+      computeFocusWindow(app.pg, deviceId),
+      computeEffortByCategory(app.pg, deviceId),
+      computeSettleTrend(app.pg, deviceId),
+      computeBreakQuality(app.pg, deviceId),
+      computeInterventionEfficacy(app.pg, deviceId),
+      computeValidation(app.pg, deviceId),
+      computeCrossSessionDistractionPattern(app.pg, deviceId),
+    ]);
 
-    return { focusWindow, effortByCategory, settleTrend, breakQuality, interventionEfficacy, validation };
+    return {
+      focusWindow,
+      effortByCategory,
+      settleTrend,
+      breakQuality,
+      interventionEfficacy,
+      validation,
+      distractionPatterns,
+    };
   });
 }

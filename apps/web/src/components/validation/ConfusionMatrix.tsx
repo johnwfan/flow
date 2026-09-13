@@ -1,76 +1,135 @@
 import { State } from "@flow/shared";
 import type { ValidationResult } from "@/types/api";
-import { Card } from "@/components/ui/Card";
-import { StatTile } from "@/components/ui/StatTile";
+import { NotEnoughData } from "@/components/ui/NotEnoughData";
 import { stateLabel } from "@/lib/colors";
 import { formatPercent } from "@/lib/format";
+import { MIN_PROBES_FOR_VALIDATION } from "@/lib/patterns";
 
-const BLUE_RAMP = ["#fcfcfb", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#1c5cab", "#0d366b"];
+// Rows are what the classifier said (predicted); columns are what you said
+// (self-report / actual) -- see computeValidation, which stores the matrix
+// keyed the other way round (actual outer, predicted inner), so this reads
+// it transposed to match the design's row/column convention.
+const PREDICTED_STATES = Object.values(State);
 
-function rampColor(value: number, max: number): string {
-  if (max === 0) return BLUE_RAMP[0]!;
-  const step = Math.min(BLUE_RAMP.length - 1, Math.round((value / max) * (BLUE_RAMP.length - 1)));
-  return BLUE_RAMP[step]!;
+function actualColumns(matrix: ValidationResult["confusionMatrix"]): string[] {
+  const found = Object.keys(matrix);
+  const canonicalOrder = [...PREDICTED_STATES, "other"];
+  const known = canonicalOrder.filter((k) => found.includes(k));
+  const extra = found.filter((k) => !canonicalOrder.includes(k));
+  const columns = [...known, ...extra];
+  return columns.length > 0 ? columns : ["other"];
+}
+
+function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11.5, color: "var(--mute)" }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: "-0.04em", fontVariantNumeric: "tabular-nums", marginTop: 5 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--mute)", marginTop: 4 }}>{note}</div>
+    </div>
+  );
+}
+
+function ValidationStats({ data }: { data: ValidationResult }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: "var(--s7)",
+        marginTop: "var(--s6)",
+        paddingTop: "var(--s4)",
+        borderTop: "1px solid var(--line)",
+        flexWrap: "wrap",
+      }}
+    >
+      <Stat label="Check-ins" value={`n = ${data.n}`} note={`${data.n} answered`} />
+      <Stat label="Agreement" value={formatPercent(data.agreementRate)} note="matched your self-report" />
+      <Stat label="False alarms" value={formatPercent(data.falseAlarmRate)} note="called drifting, you were fine" />
+    </div>
+  );
 }
 
 export function ConfusionMatrix({ data }: { data: ValidationResult }) {
-  const predictedStates = Object.values(State);
-  const actualLabels = [...new Set([...Object.keys(data.confusionMatrix), ...predictedStates])];
+  if (data.n < MIN_PROBES_FOR_VALIDATION) {
+    return (
+      <div>
+        <NotEnoughData height={280} have={data.n} need={MIN_PROBES_FOR_VALIDATION} unit="check-ins" />
+        <ValidationStats data={data} />
+      </div>
+    );
+  }
 
-  const max = Math.max(1, ...Object.values(data.confusionMatrix).flatMap((row) => Object.values(row)));
+  const columns = actualColumns(data.confusionMatrix);
+  const maxAgreement = Math.max(1, ...PREDICTED_STATES.map((p) => data.confusionMatrix[p]?.[p] ?? 0));
+  const gridCols = `120px repeat(${columns.length}, minmax(0, 1fr))`;
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        <StatTile label="Probes answered" value={String(data.n)} />
-        <StatTile label="Agreement rate" value={formatPercent(data.agreementRate)} />
-        <StatTile label="False-alarm rate" value={formatPercent(data.falseAlarmRate)} />
+    <div>
+      <div style={{ maxWidth: 520 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: gridCols,
+            gap: "var(--s2)",
+            alignItems: "end",
+            marginBottom: "var(--s2)",
+          }}
+        >
+          <span />
+          {columns.map((c) => (
+            <span key={c} style={{ fontSize: 12.5, color: "var(--body)", textAlign: "center" }}>
+              you said {c === "other" ? "other" : stateLabel(c).toLowerCase()}
+            </span>
+          ))}
+        </div>
+
+        {PREDICTED_STATES.map((predicted) => (
+          <div
+            key={predicted}
+            style={{
+              display: "grid",
+              gridTemplateColumns: gridCols,
+              gap: "var(--s2)",
+              marginBottom: "var(--s2)",
+              alignItems: "stretch",
+            }}
+          >
+            <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--body)", alignSelf: "center" }}>
+              {predicted}
+            </span>
+            {columns.map((actual) => {
+              const count = data.confusionMatrix[actual]?.[predicted] ?? 0;
+              const agrees = actual === predicted;
+              const alpha = agrees ? 0.12 + (count / maxAgreement) * 0.78 : 0;
+              const background = agrees ? `oklch(from var(--deep) l c h / ${alpha.toFixed(2)})` : "var(--sink)";
+              const bright = agrees && alpha > 0.6;
+              return (
+                <span
+                  key={actual}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: 84,
+                    borderRadius: "var(--r-sm)",
+                    fontSize: 23,
+                    fontWeight: 500,
+                    fontVariantNumeric: "tabular-nums",
+                    background,
+                    color: bright ? "oklch(1 0 0)" : "var(--body)",
+                  }}
+                >
+                  {count || ""}
+                </span>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
-      {data.n === 0 ? (
-        <p className="text-sm text-muted">No thought-probe responses recorded yet.</p>
-      ) : (
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="border-separate border-spacing-1 text-xs">
-              <thead>
-                <tr>
-                  <th className="p-1 text-right font-medium text-muted">actual \ predicted</th>
-                  {predictedStates.map((p) => (
-                    <th key={p} className="p-1 text-center font-medium text-muted">
-                      {stateLabel(p)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {actualLabels.map((actual) => (
-                  <tr key={actual}>
-                    <th className="p-1 text-right font-medium text-muted">
-                      {actual === "other" ? "Other" : stateLabel(actual)}
-                    </th>
-                    {predictedStates.map((predicted) => {
-                      const count = data.confusionMatrix[actual]?.[predicted] ?? 0;
-                      return (
-                        <td
-                          key={predicted}
-                          className="h-10 w-10 rounded text-center align-middle font-medium"
-                          style={{
-                            backgroundColor: rampColor(count, max),
-                            color: count / max > 0.5 ? "#fcfcfb" : "#0b0b0b",
-                          }}
-                        >
-                          {count || ""}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+      <ValidationStats data={data} />
     </div>
   );
 }

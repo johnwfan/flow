@@ -107,6 +107,100 @@ export async function computeDistractionStats(
   };
 }
 
+export interface CrossSessionDistractionPattern {
+  appTitle: string | null;
+  category: string | null;
+  minutes: number;
+  episodes: number;
+}
+
+interface DistractedBucketRow {
+  bucket: Date;
+  state: string;
+}
+
+interface DistractedEpisode {
+  state: string;
+  startedAt: Date;
+  endedAt: Date;
+}
+
+/** Groups consecutive (same-state, back-to-back) 1-minute buckets into episodes -- the
+ * same run-length logic as rollups.ts's ribbon builder, scoped to just the two
+ * distraction states so this stays a self-contained aggregate query. */
+function bucketsToEpisodes(buckets: DistractedBucketRow[]): DistractedEpisode[] {
+  const episodes: DistractedEpisode[] = [];
+  for (const row of buckets) {
+    const bucketEnd = new Date(row.bucket.getTime() + 60_000);
+    const last = episodes[episodes.length - 1];
+    if (last && last.state === row.state && last.endedAt.getTime() === row.bucket.getTime()) {
+      last.endedAt = bucketEnd;
+    } else {
+      episodes.push({ state: row.state, startedAt: row.bucket, endedAt: bucketEnd });
+    }
+  }
+  return episodes;
+}
+
+/**
+ * Cross-session counterpart to computeDistractionStats: same underlying signal
+ * (samples_1min state buckets correlated with app_context events) but rolled up
+ * across every session for a device instead of scoped to one, ranking which
+ * apps/categories distraction (zoned_out + spiraling) concentrates in.
+ *
+ * Naturally returns an empty array -- no fabricated placeholder data -- when a
+ * device has no sessions or no distracted minutes yet, matching how
+ * computeFocusWindow/computeSettleTrend degrade with too little signal; the
+ * caller/UI decides how many sessions are "enough" to draw a pattern from.
+ */
+export async function computeCrossSessionDistractionPattern(
+  pool: Pool,
+  deviceId?: string,
+): Promise<CrossSessionDistractionPattern[]> {
+  const sessionResult = await pool.query<{ id: string }>(
+    deviceId ? "SELECT id FROM sessions WHERE device_id = $1" : "SELECT id FROM sessions",
+    deviceId ? [deviceId] : [],
+  );
+
+  const byKey = new Map<string, CrossSessionDistractionPattern>();
+
+  for (const session of sessionResult.rows) {
+    const buckets = await pool.query<DistractedBucketRow>(
+      `SELECT bucket, state FROM samples_1min
+       WHERE session_id = $1 AND state = ANY($2::text[])
+       ORDER BY bucket ASC`,
+      [session.id, [State.ZonedOut, State.Spiraling]],
+    );
+    if (buckets.rows.length === 0) continue;
+
+    const episodes = bucketsToEpisodes(buckets.rows);
+    const contextTimeline = await getAppContextTimeline(pool, session.id);
+
+    for (const episode of episodes) {
+      const app = appAt(contextTimeline, episode.startedAt.getTime());
+      const key = `${app?.app_title ?? "unknown"}::${app?.category ?? "unknown"}`;
+      const minutes = (episode.endedAt.getTime() - episode.startedAt.getTime()) / 60_000;
+
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.minutes += minutes;
+        existing.episodes += 1;
+      } else {
+        byKey.set(key, {
+          appTitle: app?.app_title ?? null,
+          category: app?.category ?? null,
+          minutes,
+          episodes: 1,
+        });
+      }
+    }
+  }
+
+  return [...byKey.values()]
+    .map((p) => ({ ...p, minutes: Math.round(p.minutes * 10) / 10 }))
+    .sort((a, b) => b.minutes - a.minutes);
+}
+
 function buildTipsPrompt(
   summary: SessionSummary,
   stats: Pick<SessionInsights, "distractionPct" | "zoneOutEpisodes" | "spiralEpisodes" | "distractingApps">,
