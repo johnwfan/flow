@@ -800,7 +800,17 @@ export default function SessionPage() {
           <button
             className={`${styles.btn} ${styles.btnQuiet}`}
             style={{ fontSize: 11.5, padding: "6px 13px" }}
-            onClick={() => setPreviewAlertOn((v) => !v)}
+            onClick={() =>
+              setPreviewAlertOn((v) => {
+                const next = !v;
+                // Preview never routes through the real WsMessage "alert" handler
+                // (that's the only place playChime() is normally called), so fire
+                // it here directly -- otherwise "Preview intervention" shows the
+                // card silently, which looks exactly like a broken chime.
+                if (next) playChime(state?.state === "spiraling" ? "spiral" : "zone_out");
+                return next;
+              })
+            }
           >
             {previewAlertOn ? "Hide intervention" : "Preview intervention"}
           </button>
