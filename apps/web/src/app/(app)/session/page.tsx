@@ -43,11 +43,25 @@ const MUTE_STROKE = "oklch(0.54 0 0)";
 const FRESH_MS = 2000;
 const STALE_MS = 12_000;
 
+// SmartSpectra's ValidationCode.kChestNotVisible -- the single biggest
+// reason breathing tracking silently produces nothing: it's estimated
+// from chest movement, not the face, so a close/face-only framing (the
+// natural way to sit at a laptop) blocks it even though pulse/HRV/blink
+// keep working fine off the face alone.
+const CHEST_NOT_VISIBLE_CODE = 7;
+
 // Exponential-smoothing factors per metric (higher = tracks raw value
 // faster / smooths less) and how often the smoothed value is allowed to
 // actually reach React state -- see smoothedRef/uiUpdateAtRef below.
 const PULSE_ALPHA = 0.18;
-const BREATH_ALPHA = 0.1;
+// Was 0.1 -- deliberately smoothed harder than pulse on the assumption
+// breathing changes slowly, but breathing_rpm itself only updates every
+// few seconds (not every sample), so that extra smoothing stacked with
+// its already-slow update rate made the display lag well behind an
+// actual breathing-rate change. Now tracks a real change faster than it
+// filters noise, since agent-side plausibility filtering (sdk-adapter.ts)
+// handles rejecting outright garbage readings instead.
+const BREATH_ALPHA = 0.35;
 const HRV_ALPHA = 0.12;
 const EDA_ALPHA = 0.15;
 const CONF_ALPHA = 0.25;
@@ -534,6 +548,7 @@ export default function SessionPage() {
   const [elapsedS, setElapsedS] = useState(0);
   const startedAtRef = useRef<number | null>(null);
   const [validationHint, setValidationHint] = useState<string | null>(null);
+  const [validationCode, setValidationCode] = useState<number | null>(null);
   const [cameraRefused, setCameraRefused] = useState<string | null>(null);
   const [previewOn, setPreviewOn] = useState(false);
   const [previewStatus, setPreviewStatus] = useState<PreviewStatus>("idle");
@@ -589,9 +604,6 @@ export default function SessionPage() {
       if (isTyping || e.altKey || e.ctrlKey || e.metaKey || e.key.toLowerCase() !== "h") return;
 
       e.preventDefault();
-      setPreviewState(null);
-      setPreviewAlertOn(false);
-      setDemoControlsOpen(false);
       setDemoUiHidden((hidden) => !hidden);
     }
 
@@ -686,9 +698,10 @@ export default function SessionPage() {
             // Diagnostic-only messages outside the frozen WsMessage
             // contract (see ws-server.ts's broadcastRaw / index.ts's
             // debug_validation and debug_error).
-            const raw = msg as unknown as { kind: string; hint?: string; reason?: string; fatal?: boolean };
+            const raw = msg as unknown as { kind: string; hint?: string; code?: number; reason?: string; fatal?: boolean };
             if (raw.kind === "debug_validation" && raw.hint) {
               setValidationHint(raw.hint);
+              setValidationCode(raw.code ?? null);
             } else if (raw.kind === "debug_error" && raw.fatal) {
               setCameraRefused(raw.reason ?? "camera unavailable");
             }
@@ -822,6 +835,7 @@ export default function SessionPage() {
       setPhase("warmup");
       setCameraRefused(null);
       setValidationHint(null);
+      setValidationCode(null);
       // Fresh session -- don't hold over the last session's readings; a
       // brand new session showing an old heart rate would be exactly the
       // kind of "pretending to have data" the hold-last-good display is
@@ -1026,7 +1040,7 @@ export default function SessionPage() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.stateDot} style={{ background: state ? currentColor : "var(--tick)" }} />
-          <span className={styles.title}>{isRunning ? "Active session" : isPreviewing ? "Session preview" : "Session"}</span>
+          <span className={styles.title}>{isRunning ? "Active tracker" : isPreviewing ? "Tracker preview" : "Tracker"}</span>
           {isRunning && <span className={`${styles.elapsed} ${styles.num}`}>{formatElapsed(elapsedS)}</span>}
         </div>
         <div className={styles.headerActions}>
@@ -1100,7 +1114,7 @@ export default function SessionPage() {
           )}
           {!isRunning && (
             <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => send("start")} disabled={!connected}>
-              Start session
+              Start tracker
             </button>
           )}
           {isRunning && phase !== "paused" && (
@@ -1115,7 +1129,7 @@ export default function SessionPage() {
           )}
           {isRunning && (
             <button className={`${styles.btn} ${styles.btnQuiet}`} onClick={() => send("end")}>
-              End session
+              End tracker
             </button>
           )}
         </div>
@@ -1208,6 +1222,11 @@ export default function SessionPage() {
                   lost={isLost}
                   ariaLabel={`Breathing waveform, currently ${breathing != null ? breathing.toFixed(1) : "unknown"} breaths per minute`}
                 />
+                {validationCode === CHEST_NOT_VISIBLE_CODE && (
+                  <div style={{ fontSize: 12, color: "var(--spiral-ink)", marginTop: 8 }}>
+                    ⚠ Move back so your chest is in frame — breathing needs it, pulse doesn&apos;t.
+                  </div>
+                )}
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", gap: 24, marginTop: 24 }}>

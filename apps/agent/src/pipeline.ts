@@ -111,11 +111,16 @@ export class Pipeline {
     // Always buffer for upload
     this.uploadBuffer.push(sample);
 
-    // Track recent breathing rate for guide pacing (last ~20s at 1 sample/s
-    // worth of readings — breathing_rpm updates far slower than 20Hz anyway)
+    // Track recent breathing rate for guide pacing. Was a 20-reading
+    // window -- since breathing_rpm only updates once every few seconds
+    // (not every 20Hz sample), that stretched over a minute or more of
+    // history, so the paced guide kept breathing-pacing the user's rate
+    // from a while ago instead of right now. Shorter window = it catches
+    // up to an actual rate change in a few readings instead of a couple
+    // dozen.
     if (sample.breathing_rpm != null) {
       this.recentBreathingRates.push(sample.breathing_rpm);
-      if (this.recentBreathingRates.length > 20) this.recentBreathingRates.shift();
+      if (this.recentBreathingRates.length > 6) this.recentBreathingRates.shift();
     }
 
     if (!this.warmupComplete) {

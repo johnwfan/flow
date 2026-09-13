@@ -185,7 +185,15 @@ export class SdkAdapter {
 
   private mapToSample(metrics: any, timestampUs: number): SampleMessage {
     const pulseRate = metrics.cardio?.pulseRate?.at(-1)?.value ?? null;
-    const breathingRate = metrics.breathing?.rate?.at(-1)?.value ?? null;
+    const rawBreathingRate = metrics.breathing?.rate?.at(-1)?.value ?? null;
+    // A single implausible reading (chest partially out of frame, brief
+    // motion) shouldn't reach the classifier/display/guide at all --
+    // reject outside a generous physiological range instead of letting it
+    // through, so downstream code can afford to react quickly to what's
+    // left without also reacting quickly to garbage. Wide bounds on
+    // purpose (panic/exertion can push well past a resting rate).
+    const breathingRate =
+      rawBreathingRate != null && rawBreathingRate >= 4 && rawBreathingRate <= 45 ? rawBreathingRate : null;
     const hrvRmssd = metrics.cardio?.hrv?.at(-1)?.rmssd ?? null;
     const edaTrace = metrics.eda?.trace?.at(-1)?.value ?? null;
     const blinkDetected = metrics.face?.blinking?.at(-1)?.detected;
