@@ -258,6 +258,7 @@ function choosePreviewDevice(devices: MediaDeviceInfo[], protectSensingCamera: b
   if (protectSensingCamera) {
     const nonSensing = videoInputs.find((device) => device.label && !isLikelySensingCamera(device));
     if (nonSensing) return nonSensing;
+    return null;
   }
 
   return videoInputs[0] ?? null;
@@ -557,6 +558,8 @@ export default function SessionPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
   const [phase, setPhase] = useState<"idle" | "warmup" | "active" | "paused" | "ended">("idle");
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
@@ -645,7 +648,20 @@ export default function SessionPage() {
     function connect() {
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
-      ws.onopen = () => !cancelled && setConnected(true);
+      ws.onopen = () => {
+        if (cancelled) return;
+        setConnected(true);
+        const currentSessionId = sessionIdRef.current;
+        const currentPhase = phaseRef.current;
+        const shouldResume =
+          currentSessionId &&
+          (currentPhase === "warmup" || currentPhase === "active" || currentPhase === "paused");
+        if (!shouldResume) return;
+        ws.send(JSON.stringify({ kind: "session_control", action: "start", session_id: currentSessionId, ts: Date.now() }));
+        if (currentPhase === "paused") {
+          ws.send(JSON.stringify({ kind: "session_control", action: "pause", session_id: currentSessionId, ts: Date.now() }));
+        }
+      };
       ws.onclose = () => {
         if (cancelled) return;
         setConnected(false);
@@ -931,6 +947,11 @@ export default function SessionPage() {
     try {
       let devices = await getVideoInputs();
       let choice = choosePreviewDevice(devices, opts.protectSensingCamera);
+      if (opts.protectSensingCamera && !choice) {
+        setPreviewStatus("blocked");
+        setPreviewMessage("preview held to protect sensing camera");
+        return;
+      }
       stream = await openPreviewStream(choice);
 
       // Labels often appear only after permission is granted. Once they do,

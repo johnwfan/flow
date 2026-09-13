@@ -115,6 +115,11 @@ export class SdkAdapter {
     this.cameraIndex = index;
   }
 
+  forceResetBeforeNextStart(): void {
+    this.running = false;
+    this.needsReset = true;
+  }
+
   start(): boolean {
     if (!this.sdk) {
       console.error("[sdk] not initialized — call init() first");
@@ -169,9 +174,14 @@ export class SdkAdapter {
 
   async stop(): Promise<void> {
     if (!this.sdk || !this.running) return;
-    await this.sdk.stopAsync();
     this.running = false;
-    console.log("[sdk] camera capture stopped");
+    try {
+      await this.sdk.stopAsync();
+      console.log("[sdk] camera capture stopped");
+    } catch (err) {
+      this.needsReset = true;
+      throw err;
+    }
   }
 
   async destroy(): Promise<void> {

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { spawn } from "node:child_process";
 import dotenv from "dotenv";
 import { AgentWsServer } from "./ws-server.js";
 import { MockEmitter } from "./mock-emitter.js";
@@ -168,18 +169,38 @@ const server = new AgentWsServer({
     }
 
     // Capture phase BEFORE handleControl mutates it — a redundant "start"
-    // while already running must not register a second orphan session
-    // (session.start() itself is idempotent-safe and just warns+no-ops,
-    // but apiClient.startSession() has no such guard, so we gate it here).
+    // while already running must not register a second orphan session or
+    // prod the native camera stack a second time.
     const wasIdle = msg.action === "start" && (session.phase === "idle" || session.phase === "ended");
     const isPreflight = msg.session_id.startsWith("preflight-");
 
+    if (msg.action === "start" && !wasIdle) {
+      console.warn(
+        `[session] ignoring duplicate start ${msg.session_id}; active session is ${session.sessionId ?? "unknown"} (${session.phase})`
+      );
+      return;
+    }
+
+    if (msg.action !== "start" && isPreflight && session.sessionId !== msg.session_id) {
+      console.log(`[preflight] ignored ${msg.action} for ${msg.session_id}; active session is ${session.sessionId ?? "none"}`);
+      return;
+    }
+
+    const phaseBeforeControl = session.phase;
+    const controlCanApply =
+      msg.action === "start" ||
+      (msg.action === "end" && phaseBeforeControl !== "idle" && phaseBeforeControl !== "ended") ||
+      (msg.action === "pause" && (phaseBeforeControl === "active" || phaseBeforeControl === "warmup")) ||
+      (msg.action === "resume" && phaseBeforeControl === "paused");
+
     session.handleControl(msg);
+
+    if (!controlCanApply) return;
 
     if (msg.action === "start") {
       pipeline.startTracking();
-      startEmitting({ freshSession: wasIdle });
-      if (wasIdle && !isPreflight) {
+      startEmitting({ freshSession: true });
+      if (!isPreflight) {
         // Register the session with the API in the background, but remember
         // the promise so a quick End can still wait for the real persisted id.
         startPersistedSession();
@@ -207,9 +228,13 @@ const server = new AgentWsServer({
 // ── Sample handler ─────────────────────────────────────────────────
 function handleSample(sample: SampleMessage): void {
   if (!session.shouldEmit) return;
-  if (useReal && sampleLooksReal(sample)) {
-    samplesOnCurrentCamera++;
-    maybeConfirmCurrentCamera();
+  if (useReal) {
+    cameraResponsiveOnCurrentCamera = true;
+    rawSamplesOnCurrentCamera++;
+    if (sampleLooksReal(sample)) {
+      samplesOnCurrentCamera++;
+      maybeConfirmCurrentCamera();
+    }
   }
 
   // Route through pipeline (baseline → classifier → alerts)
@@ -234,6 +259,38 @@ function startDemo(): void {
   } catch (err: any) {
     console.error(`[demo] failed to start: ${err.message}`);
   }
+}
+
+function scheduleAgentSelfRestart(): void {
+  if (process.env.FLOW_AGENT_AUTO_RESTART !== "1") return;
+
+  const payload = JSON.stringify({
+    execPath: process.execPath,
+    execArgv: process.execArgv,
+    argv: process.argv.slice(1),
+    cwd: process.cwd(),
+  });
+
+  const helperScript = `
+const { spawn } = require("node:child_process");
+const payload = ${payload};
+setTimeout(() => {
+  const child = spawn(payload.execPath, [...payload.execArgv, ...payload.argv], {
+    cwd: payload.cwd,
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  child.unref();
+}, 2000);
+`;
+
+  const helper = spawn(process.execPath, ["-e", helperScript], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  helper.unref();
 }
 
 // Broadcast a fatal camera/SDK failure so the live session page can be
@@ -265,7 +322,10 @@ const MAX_CAMERA_ATTEMPTS = cameraCandidates.length * 2;
 // plus decoded samples from the current index.
 let faceFoundOnCurrentCamera = false;
 let consecutiveFaceFrames = 0;
+let cameraResponsiveOnCurrentCamera = false;
+let rawSamplesOnCurrentCamera = 0;
 let samplesOnCurrentCamera = 0;
+let latestValidationHint: string | null = null;
 const CONFIRM_FACE_FRAMES = 10;
 const CONFIRM_REAL_SAMPLES = 3;
 let faceSearchTimer: NodeJS.Timeout | null = null;
@@ -281,6 +341,8 @@ const FACE_SEARCH_WINDOW_MS = 12_000;
 // unstable camera still eventually falls back to mock instead of retrying
 // forever.
 const TIMESTAMP_GAP_ERROR_CODE = 11;
+const SMARTSPECTRA_PROCESSING_FAILED_ERROR_CODE = 8;
+const SMARTSPECTRA_RESTART_EXIT_CODE = 88;
 let timestampGapRetries = 0;
 const MAX_TIMESTAMP_GAP_RETRIES = 5;
 // If a restart stays up this long without another gap error, treat the
@@ -289,24 +351,90 @@ const MAX_TIMESTAMP_GAP_RETRIES = 5;
 // camera that's fundamentally unable to hold a framerate.
 const GAP_STABILITY_MS = 30_000;
 let gapStabilityTimer: NodeJS.Timeout | null = null;
+let cameraRecoveryInProgress = false;
+let queuedCameraRecovery: CameraRecovery | null = null;
+const CAMERA_STOP_TIMEOUT_MS = 1_500;
+
+type CameraRecovery = {
+  reason: string;
+  skipStop: boolean;
+};
+
+function queueCameraRecovery(reason: string, options: { skipStop?: boolean } = {}): boolean {
+  if (!cameraRecoveryInProgress) return false;
+  if (!queuedCameraRecovery) {
+    queuedCameraRecovery = { reason, skipStop: options.skipStop ?? false };
+    console.warn(`[agent] ${reason} — queued behind active camera recovery`);
+  }
+  return true;
+}
+
+function finishCameraRecovery(): void {
+  cameraRecoveryInProgress = false;
+  const queued = queuedCameraRecovery;
+  queuedCameraRecovery = null;
+  if (!queued || !session.shouldEmit) return;
+  if (currentCameraHadSignal()) {
+    restartCurrentCamera(queued.reason, { skipStop: queued.skipStop });
+  } else {
+    tryNextCamera(queued.reason, { skipStop: queued.skipStop });
+  }
+}
+
+function stopAdapterForRecovery(adapter: SdkAdapter, context: string): Promise<void> {
+  let timeout: NodeJS.Timeout | null = null;
+  return Promise.race([
+    adapter.stop().catch((err) => {
+      console.error(`[agent] SDK stop before ${context} failed:`, err);
+      adapter.forceResetBeforeNextStart();
+    }),
+    new Promise<void>((resolve) => {
+      timeout = setTimeout(() => {
+        console.warn(`[agent] SDK stop timed out before ${context}; forcing reset on next start`);
+        adapter.forceResetBeforeNextStart();
+        resolve();
+      }, CAMERA_STOP_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
+}
 
 /** Restart capture on the SAME camera index -- for a transient pipeline
  * hiccup, not evidence this is the wrong device (unlike tryNextCamera). */
-function restartCurrentCamera(reason: string): void {
+function restartCurrentCamera(reason: string, options: { skipStop?: boolean } = {}): void {
+  if (queueCameraRecovery(reason, options)) return;
   const adapter = sdkAdapter;
   if (!adapter) return;
+  cameraRecoveryInProgress = true;
+  clearFaceSearchTimer();
   console.warn(`[agent] ${reason} — restarting capture on the same camera`);
-  adapter.stop().finally(() => {
-    adapter.start();
+  const restartAfterStop = () => {
+    const started = adapter.start();
     // Only re-arm the face search if this camera hadn't already proven
     // itself -- a mid-session hiccup on an already-confirmed camera
     // shouldn't restart the "is this even the right camera" search.
-    if (!faceFoundOnCurrentCamera) armFaceSearchTimer();
+    if (started && !faceFoundOnCurrentCamera) armFaceSearchTimer();
+    if (!started && !queuedCameraRecovery) {
+      queuedCameraRecovery = { reason: `camera restart failed after ${reason}`, skipStop: true };
+    }
     if (gapStabilityTimer) clearTimeout(gapStabilityTimer);
     gapStabilityTimer = setTimeout(() => {
       timestampGapRetries = 0;
     }, GAP_STABILITY_MS);
-  });
+  };
+
+  if (options.skipStop) {
+    adapter.forceResetBeforeNextStart();
+    try {
+      restartAfterStop();
+    } finally {
+      finishCameraRecovery();
+    }
+    return;
+  }
+
+  stopAdapterForRecovery(adapter, "restart").then(restartAfterStop).finally(finishCameraRecovery);
 }
 
 function sampleLooksReal(sample: SampleMessage): boolean {
@@ -330,7 +458,20 @@ function validationMeansFaceVisible(code: number): boolean {
 function resetCameraEvidence(): void {
   faceFoundOnCurrentCamera = false;
   consecutiveFaceFrames = 0;
+  cameraResponsiveOnCurrentCamera = false;
+  rawSamplesOnCurrentCamera = 0;
   samplesOnCurrentCamera = 0;
+  latestValidationHint = null;
+}
+
+function currentCameraHadSignal(): boolean {
+  return (
+    faceFoundOnCurrentCamera ||
+    cameraResponsiveOnCurrentCamera ||
+    consecutiveFaceFrames > 0 ||
+    rawSamplesOnCurrentCamera > 0 ||
+    samplesOnCurrentCamera > 0
+  );
 }
 
 function resetCameraSearchForFreshSession(): void {
@@ -370,18 +511,23 @@ function clearFaceSearchTimer(): void {
   }
 }
 
-/** Give up on the current candidate index and try the next one (or mock if exhausted). */
-function tryNextCamera(reason: string): void {
+/** Give up on the current candidate index and try the next one (or fail loudly if exhausted). */
+function tryNextCamera(reason: string, options: { skipStop?: boolean } = {}): void {
+  if (queueCameraRecovery(reason, options)) return;
+  const adapter = sdkAdapter;
+  if (!adapter) return;
   clearFaceSearchTimer();
+  cameraRecoveryInProgress = true;
   cameraAttempts++;
   if (cameraAttempts > MAX_CAMERA_ATTEMPTS) {
     console.error(
-      `[agent] camera unusable on every candidate index (${cameraCandidates.join(", ")}) — falling back to mock`
+      `[agent] camera unusable on every candidate index (${cameraCandidates.join(", ")})`
     );
     broadcastCameraRefused(
       `no working camera found (tried device index ${cameraCandidates.join(", ")})`
     );
-    startMock();
+    cameraRecoveryInProgress = false;
+    queuedCameraRecovery = null;
     return;
   }
   cameraCandidatePos = (cameraCandidatePos + 1) % cameraCandidates.length;
@@ -389,14 +535,28 @@ function tryNextCamera(reason: string): void {
   console.warn(
     `[agent] ${reason} — trying device index ${nextIndex} instead (attempt ${cameraAttempts}/${MAX_CAMERA_ATTEMPTS})`
   );
-  const adapter = sdkAdapter;
-  if (!adapter) return;
   resetCameraEvidence();
-  adapter.stop().finally(() => {
+  const startNextCamera = () => {
     adapter.setCameraIndex(nextIndex);
-    adapter.start();
-    armFaceSearchTimer();
-  });
+    const started = adapter.start();
+    if (started) {
+      armFaceSearchTimer();
+    } else if (!queuedCameraRecovery) {
+      queuedCameraRecovery = { reason: `camera start failed on device index ${nextIndex}`, skipStop: true };
+    }
+  };
+
+  if (options.skipStop) {
+    adapter.forceResetBeforeNextStart();
+    try {
+      startNextCamera();
+    } finally {
+      finishCameraRecovery();
+    }
+    return;
+  }
+
+  stopAdapterForRecovery(adapter, "camera switch").then(startNextCamera).finally(finishCameraRecovery);
 }
 
 /**
@@ -410,21 +570,32 @@ function armFaceSearchTimer(): void {
   clearFaceSearchTimer();
   faceSearchTimer = setTimeout(() => {
     if (faceFoundOnCurrentCamera) return;
+    if (currentCameraHadSignal()) {
+      const index = cameraCandidates[cameraCandidatePos] ?? initialCameraIndex;
+      const hint = latestValidationHint ? ` (${latestValidationHint})` : "";
+      console.warn(
+        `[agent] camera index ${index} is responding but not fully measurable yet${hint}; keeping it selected`
+      );
+      armFaceSearchTimer();
+      return;
+    }
     tryNextCamera(`camera opened but found no face within ${FACE_SEARCH_WINDOW_MS / 1000}s`);
   }, FACE_SEARCH_WINDOW_MS);
 }
 
 async function startEmitting({ freshSession = false }: { freshSession?: boolean } = {}): Promise<void> {
   if (useReal) {
+    if (mockEmitter?.isRunning) {
+      mockEmitter.stop();
+    }
     if (freshSession) {
       resetCameraSearchForFreshSession();
     }
     if (!sdkAdapter) {
       const apiKey = process.env.SMARTSPECTRA_API_KEY;
       if (!apiKey) {
-        console.error("[agent] SMARTSPECTRA_API_KEY not set — falling back to mock");
+        console.error("[agent] SMARTSPECTRA_API_KEY not set");
         broadcastCameraRefused("SMARTSPECTRA_API_KEY not set");
-        startMock();
         return;
       }
       sdkAdapter = new SdkAdapter({
@@ -432,7 +603,9 @@ async function startEmitting({ freshSession = false }: { freshSession?: boolean 
         cameraIndex: initialCameraIndex,
         onSample: handleSample,
         onValidation: (code, hint) => {
+          latestValidationHint = hint || null;
           if (validationMeansFaceVisible(code)) {
+            cameraResponsiveOnCurrentCamera = true;
             consecutiveFaceFrames++;
             maybeConfirmCurrentCamera();
           } else {
@@ -444,6 +617,15 @@ async function startEmitting({ freshSession = false }: { freshSession?: boolean 
           }
         },
         onError: (code, message, retryable) => {
+          if (code === SMARTSPECTRA_PROCESSING_FAILED_ERROR_CODE) {
+            console.error(
+              `[agent] SmartSpectra entered processing error state (${message}); exiting for supervised restart`
+            );
+            scheduleAgentSelfRestart();
+            instanceLock?.release();
+            process.kill(process.pid, "SIGKILL");
+            process.exit(SMARTSPECTRA_RESTART_EXIT_CODE);
+          }
           if (code === TIMESTAMP_GAP_ERROR_CODE) {
             if (gapStabilityTimer) {
               clearTimeout(gapStabilityTimer);
@@ -452,28 +634,32 @@ async function startEmitting({ freshSession = false }: { freshSession?: boolean 
             timestampGapRetries++;
             if (timestampGapRetries > MAX_TIMESTAMP_GAP_RETRIES) {
               console.error(
-                `[agent] repeated frame-timing errors (${timestampGapRetries}) -- this camera can't sustain a stable framerate here, falling back to mock`
+                `[agent] repeated frame-timing errors (${timestampGapRetries}) -- this camera can't sustain a stable framerate here`
               );
               broadcastCameraRefused(`camera kept losing frame sync (${message})`);
-              startMock();
               return;
             }
-            restartCurrentCamera(`frame-timing error (${message}) (attempt ${timestampGapRetries}/${MAX_TIMESTAMP_GAP_RETRIES})`);
+            restartCurrentCamera(`frame-timing error (${message}) (attempt ${timestampGapRetries}/${MAX_TIMESTAMP_GAP_RETRIES})`, {
+              skipStop: true,
+            });
             return;
           }
           if (!retryable) {
             broadcastCameraRefused(message);
             return;
           }
-          tryNextCamera(`camera start failed (${message})`);
+          if (currentCameraHadSignal()) {
+            restartCurrentCamera(`retryable camera processing error (${message})`, { skipStop: true });
+            return;
+          }
+          tryNextCamera(`camera start failed (${message})`, { skipStop: true });
         },
       });
       const ok = await sdkAdapter.init();
       if (!ok) {
-        console.warn("[agent] SDK init failed — falling back to mock");
+        console.warn("[agent] SDK init failed");
         broadcastCameraRefused("camera or SDK failed to initialize");
         sdkAdapter = null;
-        startMock();
         return;
       }
     }
