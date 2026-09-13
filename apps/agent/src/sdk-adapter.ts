@@ -11,6 +11,7 @@ export class SdkAdapter {
   private sdk: any = null;
   private onSample: (sample: SampleMessage) => void;
   private onValidation?: (code: number, hint: string) => void;
+  private onError?: (code: number, message: string, retryable: boolean) => void;
   private running = false;
   private apiKey: string;
   private cameraIndex: number;
@@ -21,11 +22,14 @@ export class SdkAdapter {
     onSample: (sample: SampleMessage) => void;
     /** SDK framing/quality hints (e.g. "Place more of the chest in view") */
     onValidation?: (code: number, hint: string) => void;
+    /** Fatal or retryable SDK errors (camera unavailable, auth failure, etc.) */
+    onError?: (code: number, message: string, retryable: boolean) => void;
   }) {
     this.apiKey = opts.apiKey;
     this.cameraIndex = opts.cameraIndex ?? 0;
     this.onSample = opts.onSample;
     this.onValidation = opts.onValidation;
+    this.onError = opts.onError;
   }
 
   async init(): Promise<boolean> {
@@ -82,6 +86,7 @@ export class SdkAdapter {
 
       this.sdk.on("error", (code: number, message: string, retryable: boolean) => {
         console.error(`[sdk] error ${code}: ${message} (retryable=${retryable})`);
+        this.onError?.(code, message, retryable);
       });
 
       console.log("[sdk] initialized");

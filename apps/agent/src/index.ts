@@ -176,12 +176,20 @@ function startDemo(): void {
   }
 }
 
+// Broadcast a fatal camera/SDK failure so the live session page can be
+// honest about it (edge state + reload prompt) instead of silently
+// swapping to mock data mid-session without saying so.
+function broadcastCameraRefused(reason: string): void {
+  server.broadcastRaw({ kind: "debug_error", fatal: true, reason, ts: Date.now() });
+}
+
 async function startEmitting(): Promise<void> {
   if (useReal) {
     if (!sdkAdapter) {
       const apiKey = process.env.SMARTSPECTRA_API_KEY;
       if (!apiKey) {
         console.error("[agent] SMARTSPECTRA_API_KEY not set — falling back to mock");
+        broadcastCameraRefused("SMARTSPECTRA_API_KEY not set");
         startMock();
         return;
       }
@@ -193,10 +201,14 @@ async function startEmitting(): Promise<void> {
           // Diagnostic-only, outside the frozen WsMessage contract
           server.broadcastRaw({ kind: "debug_validation", code, hint, ts: Date.now() });
         },
+        onError: (code, message, retryable) => {
+          if (!retryable) broadcastCameraRefused(message);
+        },
       });
       const ok = await sdkAdapter.init();
       if (!ok) {
         console.warn("[agent] SDK init failed — falling back to mock");
+        broadcastCameraRefused("camera or SDK failed to initialize");
         sdkAdapter = null;
         startMock();
         return;

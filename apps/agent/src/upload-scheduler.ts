@@ -6,7 +6,11 @@ import type {
 } from "@flow/shared";
 import { ApiClient } from "./api-client.js";
 
-const FLUSH_INTERVAL_MS = 30_000;
+// 5s instead of the original 30s -- the dashboard/API is meant to feel
+// close to live rather than have data show up half a minute late. At
+// 20Hz that's ~100 samples/batch instead of ~600, so still well inside
+// what batchInsert.ts is sized for. See docs/DECISIONS.md for context.
+const FLUSH_INTERVAL_MS = 5_000;
 
 interface RawEvent {
   ts: number;

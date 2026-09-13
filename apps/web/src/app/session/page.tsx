@@ -147,6 +147,11 @@ export default function SessionPage() {
   const [guide, setGuide] = useState<BreathingGuideMessage | null>(null);
   const [elapsedS, setElapsedS] = useState(0);
   const startedAtRef = useRef<number | null>(null);
+  const [validationHint, setValidationHint] = useState<string | null>(null);
+  const [cameraRefused, setCameraRefused] = useState<string | null>(null);
+  const [previewOn, setPreviewOn] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const previewStreamRef = useRef<MediaStream | null>(null);
 
   const [pulseSeries, pushPulse] = useRollingSeries();
   const [breathSeries, pushBreath] = useRollingSeries();
@@ -184,6 +189,7 @@ export default function SessionPage() {
             break;
           case "alert":
             setAlert(msg);
+            playChime(msg.type);
             break;
           case "app_context":
             setAppContext({ app_title: msg.app_title, category: msg.category });
@@ -191,6 +197,17 @@ export default function SessionPage() {
           case "breathing_guide":
             setGuide(msg);
             break;
+          default: {
+            // Diagnostic-only messages outside the frozen WsMessage
+            // contract (see ws-server.ts's broadcastRaw / index.ts's
+            // debug_validation and debug_error).
+            const raw = msg as unknown as { kind: string; hint?: string; reason?: string; fatal?: boolean };
+            if (raw.kind === "debug_validation" && raw.hint) {
+              setValidationHint(raw.hint);
+            } else if (raw.kind === "debug_error" && raw.fatal) {
+              setCameraRefused(raw.reason ?? "camera unavailable");
+            }
+          }
         }
       };
     }
@@ -221,15 +238,43 @@ export default function SessionPage() {
       startedAtRef.current = Date.now();
       setElapsedS(0);
       setPhase("warmup");
+      setCameraRefused(null);
+      setValidationHint(null);
     } else if (action === "end") {
       setPhase("ended");
       setSessionId(null);
       setState(null);
       setAlert(null);
+      setCameraRefused(null);
     } else {
       setPhase(action === "pause" ? "paused" : "active");
     }
   }
+
+  // Camera preview thumbnail -- a SEPARATE browser-side capture from the
+  // agent's own sensing camera. Off by default and manually toggled: on
+  // hardware that only supports one consumer at a time, running both at
+  // once can make the agent's real capture fail (see PRD risk notes).
+  async function togglePreview() {
+    if (previewOn) {
+      previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+      previewStreamRef.current = null;
+      setPreviewOn(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      previewStreamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setPreviewOn(true);
+    } catch {
+      // Permission denied or no camera -- thumbnail just stays a placeholder.
+    }
+  }
+
+  useEffect(() => {
+    return () => previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
 
   const currentColor = colorVar(state?.state ?? null);
   const isRunning = phase === "warmup" || phase === "active" || phase === "paused";
@@ -244,6 +289,22 @@ export default function SessionPage() {
             Start the local agent, then this page will connect on its own.
           </p>
           <span className={styles.chip}>run.bat</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (cameraRefused) {
+    return (
+      <div className={styles.theme}>
+        <div className={styles.edgeState} style={{ background: "var(--none-hatch)" }}>
+          <p style={{ fontSize: 18, marginBottom: 8 }}>No camera, no reading.</p>
+          <p style={{ fontSize: 13.5, color: "var(--body)", marginBottom: 16, maxWidth: "44ch", marginLeft: "auto", marginRight: "auto" }}>
+            Flow can&apos;t infer anything without the frames, and won&apos;t pretend otherwise. ({cameraRefused})
+          </p>
+          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => window.location.reload()}>
+            Reload the page
+          </button>
         </div>
       </div>
     );
@@ -388,6 +449,38 @@ export default function SessionPage() {
                 <span className={`${styles.metricValue} ${styles.num}`}>{eda != null ? eda.toFixed(2) : "—"} µS</span>
               </div>
 
+              <div style={{ marginTop: 20 }}>
+                <div className={styles.railLabel}>Camera</div>
+                <div
+                  style={{
+                    width: 160,
+                    height: 100,
+                    borderRadius: "var(--r-md)",
+                    overflow: "hidden",
+                    background: previewOn ? "#000" : "var(--none-hatch)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 6,
+                  }}
+                >
+                  {previewOn ? (
+                    <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <span style={{ fontSize: 10.5, color: "var(--mute)" }}>preview off</span>
+                  )}
+                </div>
+                <button className={`${styles.btn} ${styles.btnQuiet}`} style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={togglePreview}>
+                  {previewOn ? "Stop preview" : "Preview camera"}
+                </button>
+                <div style={{ fontSize: 10.5, color: "var(--mute)", marginTop: 6, maxWidth: 160 }}>
+                  Stays on this machine. Separate from sensing — may conflict on some webcams.
+                </div>
+                {validationHint && (
+                  <div style={{ fontSize: 11, color: "var(--spiral-ink)", marginTop: 8, maxWidth: 160 }}>⚠ {validationHint}</div>
+                )}
+              </div>
+
               {guide && (
                 <div style={{ marginTop: 24, display: "flex", flexDirection: "column", alignItems: "center" }}>
                   <div className={styles.pacerWrap}>
@@ -446,6 +539,41 @@ export default function SessionPage() {
       )}
     </div>
   );
+}
+
+// Soft synthesized chime — no audio asset needed. Two tones for zone_out
+// (per the "still with it?" nudge), a softer single tone for spiral (the
+// calming loop shouldn't start with anything jarring).
+let audioCtx: AudioContext | null = null;
+function playChime(type: "zone_out" | "spiral"): void {
+  try {
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+    const ctx = audioCtx;
+    const now = ctx.currentTime;
+
+    function tone(freq: number, start: number, duration: number, peakGain: number) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now + start);
+      gain.gain.linearRampToValueAtTime(peakGain, now + start + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + duration + 0.05);
+    }
+
+    if (type === "zone_out") {
+      tone(660, 0, 0.35, 0.12);
+      tone(880, 0.18, 0.4, 0.12);
+    } else {
+      tone(520, 0, 0.6, 0.1);
+    }
+  } catch {
+    // Web Audio unavailable or blocked -- the visual alert card still shows.
+  }
 }
 
 function formatElapsed(s: number): string {
