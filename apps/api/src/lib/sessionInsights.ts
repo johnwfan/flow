@@ -136,7 +136,7 @@ export async function generateAndStoreTips(
   stats: Pick<SessionInsights, "distractionPct" | "zoneOutEpisodes" | "spiralEpisodes" | "distractingApps">,
 ): Promise<string> {
   const prompt = buildTipsPrompt(summary, stats);
-  const tips = await generateText(prompt, { fallback: FALLBACK_TIPS, timeoutMs: 8000 });
+  const tips = await generateText(prompt, { fallback: FALLBACK_TIPS });
   await pool.query("UPDATE sessions SET tips = $1 WHERE id = $2", [tips, sessionId]);
   return tips;
 }

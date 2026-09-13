@@ -37,7 +37,7 @@ function buildPrompt(summary: SessionSummary, categories: { category: string | n
 export async function generateAndStoreNarrative(pool: Pool, sessionId: string, summary: SessionSummary): Promise<string> {
   const categories = await getCategoryBreakdown(pool, sessionId);
   const prompt = buildPrompt(summary, categories);
-  const narrative = await generateText(prompt, { fallback: FALLBACK_NARRATIVE, timeoutMs: 8000 });
+  const narrative = await generateText(prompt, { fallback: FALLBACK_NARRATIVE });
 
   await pool.query("UPDATE sessions SET narrative = $1 WHERE id = $2", [narrative, sessionId]);
   return narrative;

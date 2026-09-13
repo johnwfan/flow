@@ -14,7 +14,10 @@ export async function generateText(prompt: string, options: GenerateOptions): Pr
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 8000);
+  // Real-world p50 latency for gemini-3.6-flash on these prompts is ~7.5-8.8s
+  // (measured live 2026-09-13) -- an 8s timeout was cutting off ~half of
+  // requests, silently falling back with no visible error. 15s leaves headroom.
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
 
   try {
     const res = await fetch(
@@ -30,6 +33,8 @@ export async function generateText(prompt: string, options: GenerateOptions): Pr
     );
 
     if (!res.ok) {
+      const body = await res.text().catch(() => "<unreadable>");
+      console.error(`[gemini] request failed: status=${res.status} body=${body.slice(0, 300)}`);
       return options.fallback;
     }
 
@@ -38,7 +43,8 @@ export async function generateText(prompt: string, options: GenerateOptions): Pr
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     return text?.trim() || options.fallback;
-  } catch {
+  } catch (e) {
+    console.error(`[gemini] request threw:`, (e as Error).message);
     return options.fallback;
   } finally {
     clearTimeout(timeout);
