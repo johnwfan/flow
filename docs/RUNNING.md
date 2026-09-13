@@ -59,12 +59,12 @@ missing and what to do about each one.
    ```
 
    This starts one `tsx src/index.ts --real` agent window, then runs
-   `pnpm --filter @flow/agent preflight` before opening the page. The
-   preflight checks `SMARTSPECTRA_API_KEY`, confirms Windows reports the
-   preferred camera name (`FLOW_SENSING_CAMERA_NAME`, default `HD Webcam`)
-   as `OK`, connects to the local WebSocket, starts a short preflight
-   session, and waits for real decoded samples. If any of those fail, the
-   public session page is not opened.
+   `pnpm --filter @flow/agent preflight -- --launch-check` before opening
+   the page. The launch check verifies `SMARTSPECTRA_API_KEY`, confirms
+   Windows reports the preferred camera name (`FLOW_SENSING_CAMERA_NAME`,
+   default `HD Webcam`) as `OK`, connects to the local WebSocket, starts a
+   short preflight session, and waits for a camera/SDK signal. If any of
+   those fail, the public session page is not opened.
 
    SmartSpectra's device index doesn't reliably match Windows' device order,
    so the agent probes candidate indices, requires sustained validation plus
@@ -74,11 +74,13 @@ missing and what to do about each one.
    Status, FriendlyName` in PowerShell — a `Status` other than `OK` means
    that device isn't actually connected right now.
 
-3. After the preflight passes, `run.bat` auto-opens
+3. After the launch check passes, `run.bat` auto-opens
    `https://tryflow.study/session` (the deployed site). If you're testing
    local web/UI changes instead, open
    http://localhost:3000/session and http://localhost:3000/dashboard by
-   hand — the browser tab `run.bat` opens won't point at localhost.
+   hand — the browser tab `run.bat` opens won't point at localhost. For
+   strict camera diagnostics, run `pnpm --filter @flow/agent preflight`
+   manually; that version waits for decoded physiology samples.
 
 ## Demo — fastest path to a live session + dashboard
 
@@ -91,8 +93,9 @@ changes that.
 
 - **Web/API already deployed (e.g. to `tryflow.study`, autodeployed on
   Vultr):** you don't need `pnpm dev:all` at all — just run the agent.
-  `run.bat` starts the agent, proves the real camera path with preflight,
-  then opens `https://tryflow.study/session` in your default browser.
+  `run.bat` starts the agent, proves the camera launch path with preflight,
+  then opens `https://tryflow.study/session` in your default browser so you
+  can finish framing/alignment with the live page visible.
   `run-demo.bat` still opens the replay path separately. The `/session` page connects straight to the
   agent's local WebSocket (`ws://localhost:8765` by default — see
   `NEXT_PUBLIC_AGENT_WS_URL` in `.env.example`), not through the API, so
@@ -153,7 +156,7 @@ aggregate round trip via `seed-demo.ts`. Requires `pnpm dev:all` already
 running in another terminal. Prints a manual checklist afterward for the
 camera-dependent leg:
 
-- [ ] Start the agent against a real webcam (`run.bat`) and let preflight pass
+- [ ] Start the agent against a real webcam (`run.bat`) and let the launch check pass
 - [ ] Confirm `/session` opens and the waveform renders within ~20s and the
       state badge leaves "warmup"
 - [ ] Let a zone-out alert fire (or use `run-demo.bat` to replay a fixed

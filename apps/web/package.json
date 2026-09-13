@@ -6,7 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "start": "next start",
-    "clean": "rm -rf .next"
+    "clean": "node ../../scripts/rm.mjs .next"
   },
   "dependencies": {
     "@flow/shared": "workspace:*",

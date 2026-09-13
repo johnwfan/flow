@@ -13,6 +13,7 @@ const urlArg = args.indexOf("--url");
 const wsUrl = urlArg >= 0 ? args[urlArg + 1]! : "ws://localhost:8765";
 const timeoutArg = args.indexOf("--timeout-ms");
 const timeoutMs = timeoutArg >= 0 ? Number.parseInt(args[timeoutArg + 1]!, 10) : 35_000;
+const launchCheck = args.includes("--launch-check") || args.includes("--connectivity-only");
 const preferredName = process.env.FLOW_SENSING_CAMERA_NAME?.trim() || "HD Webcam";
 
 function sampleLooksReal(sample: any): boolean {
@@ -124,6 +125,53 @@ function waitForSamples(ws: WebSocket, deadline: number): Promise<void> {
   });
 }
 
+function waitForCameraSignal(ws: WebSocket, deadline: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let latestHint: string | null = null;
+
+    const timer = setTimeout(() => {
+      const hint = latestHint ? ` Latest camera hint: ${latestHint}` : "";
+      reject(new Error(`timed out waiting for camera signal.${hint}`));
+    }, Math.max(1000, deadline - Date.now()));
+
+    ws.on("message", (raw) => {
+      let msg: any;
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+
+      if (msg.kind === "debug_error" && msg.fatal) {
+        clearTimeout(timer);
+        reject(new Error(msg.reason ?? "camera unavailable"));
+        return;
+      }
+
+      if (msg.kind === "debug_validation" && msg.hint) {
+        latestHint = msg.hint;
+        clearTimeout(timer);
+        console.log(`[preflight] camera responding: ${msg.hint}`);
+        resolve();
+        return;
+      }
+
+      if (msg.kind === "debug_camera") {
+        clearTimeout(timer);
+        console.log(`[preflight] camera confirmed on device index ${msg.deviceIndex}`);
+        resolve();
+        return;
+      }
+
+      if (msg.kind === "sample") {
+        clearTimeout(timer);
+        console.log("[preflight] camera sample stream opened");
+        resolve();
+      }
+    });
+  });
+}
+
 async function main(): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   assertEnv();
@@ -135,8 +183,13 @@ async function main(): Promise<void> {
 
   try {
     ws.send(JSON.stringify({ kind: "session_control", action: "start", session_id: sessionId, ts: Date.now() }));
-    await waitForSamples(ws, deadline);
-    console.log("[preflight] live camera path ready");
+    if (launchCheck) {
+      await waitForCameraSignal(ws, deadline);
+      console.log("[preflight] launch path ready; finish camera alignment in the session page");
+    } else {
+      await waitForSamples(ws, deadline);
+      console.log("[preflight] live camera path ready");
+    }
   } finally {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ kind: "session_control", action: "end", session_id: sessionId, ts: Date.now() }));

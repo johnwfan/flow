@@ -12,7 +12,7 @@
     "preflight": "tsx scripts/preflight.ts",
     "start": "node dist/index.js --mock",
     "start:real": "node dist/index.js --real",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/rm.mjs dist"
   },
   "dependencies": {
     "@flow/shared": "workspace:*",

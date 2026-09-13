@@ -27,7 +27,7 @@ function isActive(pathname: string, href: string) {
 }
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
 
   return (
     <aside className={styles.side}>

@@ -141,7 +141,7 @@ const server = new AgentWsServer({
 
     if (msg.action === "start") {
       pipeline.startTracking();
-      startEmitting();
+      startEmitting({ freshSession: wasIdle });
       if (wasIdle && !isPreflight) {
         // Register the session with the API in the background — don't
         // block sensing/broadcast on it. If it fails, currentSessionId
@@ -305,6 +305,16 @@ function resetCameraEvidence(): void {
   samplesOnCurrentCamera = 0;
 }
 
+function resetCameraSearchForFreshSession(): void {
+  if (faceFoundOnCurrentCamera) return;
+  clearFaceSearchTimer();
+  cameraCandidatePos = 0;
+  cameraAttempts = 0;
+  timestampGapRetries = 0;
+  resetCameraEvidence();
+  sdkAdapter?.setCameraIndex(cameraCandidates[0] ?? initialCameraIndex);
+}
+
 function maybeConfirmCurrentCamera(): void {
   if (faceFoundOnCurrentCamera) return;
   if (consecutiveFaceFrames < CONFIRM_FACE_FRAMES || samplesOnCurrentCamera < CONFIRM_REAL_SAMPLES) {
@@ -376,8 +386,11 @@ function armFaceSearchTimer(): void {
   }, FACE_SEARCH_WINDOW_MS);
 }
 
-async function startEmitting(): Promise<void> {
+async function startEmitting({ freshSession = false }: { freshSession?: boolean } = {}): Promise<void> {
   if (useReal) {
+    if (freshSession) {
+      resetCameraSearchForFreshSession();
+    }
     if (!sdkAdapter) {
       const apiKey = process.env.SMARTSPECTRA_API_KEY;
       if (!apiKey) {

@@ -71,8 +71,8 @@ console.log(`Open ${WEB_BASE_URL}/dashboard and confirm a "smoke-test" session a
 console.log("── Manual checklist (needs a real webcam -- not automatable) ──");
 console.log(`
   [ ] Start the agent against a real webcam: run.bat (repo root)
-      -- see docs/RUNNING.md if the camera index needs changing.
-  [ ] Open ${WEB_BASE_URL}/session and confirm:
+      -- it opens the deployed session page after the camera launch check.
+  [ ] Open ${WEB_BASE_URL}/session for local UI testing and confirm:
         - the pulse/breathing waveform starts rendering within ~20s
         - the state badge moves out of "warmup"
   [ ] Let it run long enough to trigger a zone-out alert, or use

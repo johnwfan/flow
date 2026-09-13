@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:history": "tsx scripts/seed-history.ts",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/rm.mjs dist"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.0",

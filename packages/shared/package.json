@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/rm.mjs dist"
   },
   "devDependencies": {
     "typescript": "^5.5.0"
