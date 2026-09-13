@@ -66,6 +66,8 @@ const HRV_ALPHA = 0.12;
 const EDA_ALPHA = 0.15;
 const CONF_ALPHA = 0.25;
 const UI_UPDATE_MS = 450;
+const VERY_LOW_SIGNAL_THRESHOLD = 0.05;
+const HIGH_BREATHING_MIN_CONFIDENCE = 0.55;
 
 function ema(prev: number | null, next: number, alpha: number): number {
   return prev == null ? next : prev + alpha * (next - prev);
@@ -814,7 +816,7 @@ export default function SessionPage() {
   function maybeNotifyHighBreathing(rpm: number, ts: number) {
     const tracker = highBreathingAlertRef.current;
     if (previewStateRef.current || phaseRef.current === "idle" || phaseRef.current === "ended") return;
-    if ((smoothedRef.current.conf ?? 1) < 0.55) return;
+    if ((smoothedRef.current.conf ?? 1) < HIGH_BREATHING_MIN_CONFIDENCE) return;
 
     if (rpm <= HIGH_BREATHING_CLEAR_RPM) {
       tracker.armed = true;
@@ -1506,15 +1508,15 @@ export default function SessionPage() {
                         className={styles.confFill}
                         style={{
                           width: `${Math.max(0, Math.min(1, conf ?? 0)) * 100}%`,
-                          background: (conf ?? 0) < 0.55 ? "var(--tick)" : currentColor,
+                          background: (conf ?? 0) < VERY_LOW_SIGNAL_THRESHOLD ? "var(--tick)" : currentColor,
                         }}
                       />
                     </div>
                     <span className={`${styles.confValue} ${styles.num}`}>{conf != null ? conf.toFixed(2) : "—"}</span>
                   </div>
-                  {(conf ?? 1) < 0.55 && (
+                  {(conf ?? 1) < VERY_LOW_SIGNAL_THRESHOLD && (
                     <div style={{ fontSize: 11.5, color: "var(--mute)", marginTop: 4 }}>
-                      Reading, not interrupting — confidence below threshold.
+                      Signal is very weak; readings may pause if it stays this low.
                     </div>
                   )}
                 </div>

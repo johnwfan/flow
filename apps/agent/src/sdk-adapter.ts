@@ -208,7 +208,7 @@ export class SdkAdapter {
     const edaTrace = metrics.eda?.trace?.at(-1)?.value ?? null;
     const blinkDetected = metrics.face?.blinking?.at(-1)?.detected;
     const talkingDetected = metrics.face?.talking?.at(-1)?.detected;
-    const faceLandmarks = metrics.face?.landmarks?.at(-1)?.value ?? null;
+    const faceLandmarks = normalizeLandmarks(metrics.face?.landmarks?.at(-1)?.value ?? null);
     const expression = metrics.face?.expression?.at(-1) ?? null;
 
     // Confidence from cardio if available, else default
@@ -247,4 +247,59 @@ function flattenExpression(expr: any): Record<string, number> | null {
     }
   }
   return Object.keys(result).length > 0 ? result : null;
+}
+
+function normalizeLandmarks(raw: unknown): number[][] | null {
+  const value =
+    raw &&
+    typeof raw === "object" &&
+    "value" in raw &&
+    (raw as { value?: unknown }).value != null
+      ? (raw as { value: unknown }).value
+      : raw;
+  const points =
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    "points" in value
+      ? (value as { points?: unknown }).points
+      : value;
+
+  if (!Array.isArray(points) || points.length === 0) return null;
+
+  if (points.every((point) => typeof point === "number")) {
+    const paired: number[][] = [];
+    for (let i = 0; i + 1 < points.length; i += 2) {
+      const x = points[i];
+      const y = points[i + 1];
+      if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+        paired.push([x, y]);
+      }
+    }
+    return paired.length > 0 ? paired : null;
+  }
+
+  const normalized: number[][] = [];
+  for (const point of points) {
+    const xy = landmarkPoint(point);
+    if (xy) normalized.push(xy);
+  }
+  return normalized.length > 0 ? normalized : null;
+}
+
+function landmarkPoint(point: unknown): number[] | null {
+  if (Array.isArray(point)) {
+    const [x, y] = point;
+    return typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)
+      ? [x, y]
+      : null;
+  }
+
+  if (!point || typeof point !== "object") return null;
+  const candidate = point as Record<string, unknown>;
+  const x = candidate.x ?? candidate.X ?? candidate[0];
+  const y = candidate.y ?? candidate.Y ?? candidate[1];
+  return typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)
+    ? [x, y]
+    : null;
 }

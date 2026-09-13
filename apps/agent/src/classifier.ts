@@ -87,13 +87,10 @@ export class Classifier {
 
     if (samples.length < 20) return; // need minimum data
 
-    // Check confidence — sustained low confidence means NoSignal. A brief
-    // dip (motion, a CPU hiccup on the machine also running the browser
-    // dashboard) is common and isn't the same as actually losing tracking
-    // -- the SDK's own per-frame framing feedback keeps working through
-    // it, so flipping the whole displayed state on the very first low
-    // tick was confusing ("it said lost signal but the webcam was still
-    // clearly tracking me"). Require it to persist before believing it.
+    // Check confidence -- only a sustained near-zero confidence level means
+    // NoSignal. SmartSpectra can still produce useful pulse/breathing values
+    // while confidence is low, so avoid blanking the whole reading unless
+    // the signal is essentially gone.
     const avgConf = avg(samples.map((s) => s.conf).filter(notNull));
     if (avgConf < th.classifier.confidence_threshold) {
       if (this.lowConfidenceSince == null) this.lowConfidenceSince = now;
@@ -245,16 +242,17 @@ export class Classifier {
     // Use landmark centroid if available
     const centroids: [number, number][] = [];
     for (const s of samples) {
-      if (s.landmarks && s.landmarks.length > 0) {
-        let cx = 0, cy = 0;
-        for (const [x, y] of s.landmarks) {
-          cx += x;
-          cy += y;
-        }
-        cx /= s.landmarks.length;
-        cy /= s.landmarks.length;
-        centroids.push([cx, cy]);
+      const landmarks = normalizeLandmarks(s.landmarks);
+      if (!landmarks) continue;
+
+      let cx = 0, cy = 0;
+      for (const [x, y] of landmarks) {
+        cx += x;
+        cy += y;
       }
+      cx /= landmarks.length;
+      cy /= landmarks.length;
+      centroids.push([cx, cy]);
     }
 
     if (centroids.length < 10) return false; // not enough data
@@ -326,4 +324,30 @@ function variance(arr: number[]): number {
   if (arr.length < 2) return 0;
   const m = avg(arr);
   return arr.reduce((sum, x) => sum + (x - m) ** 2, 0) / (arr.length - 1);
+}
+
+function normalizeLandmarks(raw: unknown): [number, number][] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+
+  const points: [number, number][] = [];
+  for (const point of raw) {
+    if (Array.isArray(point)) {
+      const [x, y] = point;
+      if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+        points.push([x, y]);
+      }
+      continue;
+    }
+
+    if (point && typeof point === "object") {
+      const candidate = point as Record<string, unknown>;
+      const x = candidate.x ?? candidate.X ?? candidate[0];
+      const y = candidate.y ?? candidate.Y ?? candidate[1];
+      if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+        points.push([x, y]);
+      }
+    }
+  }
+
+  return points.length > 0 ? points : null;
 }

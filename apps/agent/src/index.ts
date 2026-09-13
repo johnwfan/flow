@@ -653,10 +653,11 @@ function stopEmitting(): void {
 // the whole agent mid-demo is worse than losing one bad frame — log and
 // keep running rather than let an uncaught native error kill the process.
 process.on("uncaughtException", (err) => {
-  console.error(`[agent] uncaught exception (continuing): ${err.message}`);
+  console.error(`[agent] uncaught exception (continuing): ${err.stack ?? err.message}`);
 });
 process.on("unhandledRejection", (reason) => {
-  console.error(`[agent] unhandled rejection (continuing): ${reason}`);
+  const err = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+  console.error(`[agent] unhandled rejection (continuing): ${err}`);
 });
 
 // ── Startup ────────────────────────────────────────────────────────

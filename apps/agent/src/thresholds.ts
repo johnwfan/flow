@@ -24,11 +24,10 @@ export interface ClassifierThresholds {
   eval_interval_ms: number;
   hysteresis_s: number;
   confidence_threshold: number;
-  /** How long confidence must stay below threshold before flipping the
-   * displayed state to "no signal", rather than on the very next 1Hz tick.
-   * A brief confidence dip (motion, a CPU hiccup) is common and doesn't
-   * mean tracking was actually lost -- the SDK's own per-frame framing
-   * feedback keeps working through it. */
+  /** How long confidence must stay below the hard-failure threshold before
+   * flipping the displayed state to "no signal". Low-but-usable confidence
+   * still carries live pulse/breathing readings, so no_signal should only
+   * represent a sustained near-total loss. */
   no_signal_debounce_s: number;
 }
 
@@ -96,8 +95,8 @@ function getDefaults(): Thresholds {
     classifier: {
       eval_interval_ms: 1000,
       hysteresis_s: 5,
-      confidence_threshold: 0.5,
-      no_signal_debounce_s: 4,
+      confidence_threshold: 0.05,
+      no_signal_debounce_s: 15,
     },
     breathing_guide: {
       ie_ratio: 1.5,
