@@ -79,6 +79,20 @@ export function LandingStory() {
     };
   }, []);
 
+  const jumpToSection = (index: number, id: string) => {
+    const story = storyRef.current;
+    const anchor = document.getElementById(id);
+    if (!story || !anchor) return;
+
+    setActiveIndex(index);
+    setSectionProgress(0);
+    window.history.pushState(null, "", `#${id}`);
+    window.scrollTo({
+      top: window.scrollY + anchor.getBoundingClientRect().top - NAV_HEIGHT,
+      behavior: "auto",
+    });
+  };
+
   return (
     <section
       ref={storyRef}
@@ -106,6 +120,10 @@ export function LandingStory() {
                   className={styles.progressStep}
                   aria-current={index === activeIndex ? "step" : undefined}
                   style={{ "--step-progress": fill } as CSSProperties}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    jumpToSection(index, section.id);
+                  }}
                 >
                   <span className={styles.progressMeta}>
                     <span>{String(index + 1).padStart(2, "0")}</span>
@@ -129,7 +147,7 @@ export function LandingStory() {
               <div className={`${styles.panelHeading} ${styles.reveal}`}>
                 <div className={styles.kicker}>What it notices</div>
                 <h2 id="features-title">Features</h2>
-                <p>Four things Flow does, and nothing it doesn&rsquo;t.</p>
+                <p>What Flow measures, notices and offers during a work session.</p>
               </div>
               <div className={`${styles.featureGrid} ${styles.reveal}`}>
                 {features.map((feature) => (
@@ -151,7 +169,7 @@ export function LandingStory() {
               <div className={`${styles.panelHeading} ${styles.reveal}`}>
                 <div className={styles.kicker}>The point of view</div>
                 <h2 id="about-title">About</h2>
-                <p>Why it behaves the way it does.</p>
+                <p>A personal instrument for seeing attention more clearly.</p>
               </div>
               <div className={`${styles.aboutContent} ${styles.reveal}`}>
                 <p className={styles.aboutLede}>
@@ -178,7 +196,7 @@ export function LandingStory() {
               <div className={`${styles.panelHeading} ${styles.reveal}`}>
                 <div className={styles.kicker}>Under the surface</div>
                 <h2 id="tech-title">Tech</h2>
-                <p>Placeholder — swap in the real stack before launch.</p>
+                <p>How camera sensing becomes a useful session record.</p>
               </div>
               <div className={`${styles.techList} ${styles.reveal}`}>
                 {tech.map((item) => (
@@ -188,7 +206,7 @@ export function LandingStory() {
                   </article>
                 ))}
                 <p className={styles.techFoot}>
-                  Placeholder copy. Versions, model names and latency figures to be confirmed.
+                  Flow is camera-based physiological sensing, not a medical device. It does not diagnose anything.
                 </p>
               </div>
             </section>

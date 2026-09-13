@@ -139,10 +139,10 @@
   backface-visibility: hidden;
   transform-origin: center center;
   transition:
-    opacity 520ms var(--ease),
-    transform 650ms var(--ease),
-    filter 520ms var(--ease),
-    visibility 0s linear 650ms;
+    opacity 180ms var(--ease),
+    transform 220ms var(--ease),
+    filter 180ms var(--ease),
+    visibility 0s linear 220ms;
 }
 
 .panel[data-state="active"] {
