@@ -8,13 +8,14 @@ import { PhysioTimeline } from "@/components/session-detail/PhysioTimeline";
 import { CategoryRibbon } from "@/components/session-detail/CategoryRibbon";
 import { AlertsList } from "@/components/session-detail/AlertsList";
 import { ProbeComparisonTable } from "@/components/session-detail/ProbeComparisonTable";
+import { DistractionInsights } from "@/components/session-detail/DistractionInsights";
 import { formatDate, formatDuration } from "@/lib/format";
 
 export default async function SessionDetailPage({ params }: { params: { id: string } }) {
   const detail = await getSession(params.id);
   if (!detail) notFound();
 
-  const { summary, timeline, alerts, contexts, probes } = detail;
+  const { summary, timeline, alerts, contexts, probes, insights } = detail;
 
   return (
     <>
@@ -36,6 +37,11 @@ export default async function SessionDetailPage({ params }: { params: { id: stri
           <div className="mt-4">
             <CategoryRibbon contexts={contexts} startedAt={summary.startedAt} endedAt={summary.endedAt} />
           </div>
+        </Card>
+
+        <Card>
+          <h3 className="mb-3 text-base font-semibold text-ink">Distraction insights</h3>
+          <DistractionInsights insights={insights} />
         </Card>
 
         <Card>

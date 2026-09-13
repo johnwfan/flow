@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { getSessionSummary, getSessionTimeline, listSessionSummaries } from "../lib/rollups.js";
 import { generateAndStoreNarrative } from "../lib/narrative.js";
+import { computeDistractionStats, generateAndStoreTips, getStoredTips } from "../lib/sessionInsights.js";
 import type { CreateSessionBody } from "../types.js";
 
 interface EventRow {
@@ -52,7 +53,12 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     const contexts = events.filter((e) => e.kind === "app_context");
     const probes = events.filter((e) => e.kind === "thought_probe");
 
-    return { summary, timeline, alerts, contexts, probes };
+    const [distraction, tips] = await Promise.all([
+      computeDistractionStats(app.pg, summary.id, summary.stateRibbon),
+      getStoredTips(app.pg, summary.id),
+    ]);
+
+    return { summary, timeline, alerts, contexts, probes, insights: { ...distraction, tips } };
   });
 
   app.post<{ Params: { id: string } }>("/v1/sessions/:id/end", async (request, reply) => {
@@ -76,7 +82,9 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const narrative = await generateAndStoreNarrative(app.pg, sessionId, summary);
+    const distraction = await computeDistractionStats(app.pg, sessionId, summary.stateRibbon);
+    const tips = await generateAndStoreTips(app.pg, sessionId, summary, distraction);
 
-    return { sessionId, durationS: summary.durationS, narrative };
+    return { sessionId, durationS: summary.durationS, narrative, tips };
   });
 }

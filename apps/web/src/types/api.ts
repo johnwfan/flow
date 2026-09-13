@@ -31,12 +31,37 @@ export interface EventRow {
   payload: Record<string, unknown>;
 }
 
+export interface AppDistraction {
+  appTitle: string | null;
+  category: string | null;
+  minutes: number;
+  episodes: number;
+}
+
+export interface DistractionWindow {
+  startedAt: string;
+  endedAt: string;
+  durationS: number;
+  appTitle: string | null;
+  category: string | null;
+}
+
+export interface SessionInsights {
+  distractionPct: number;
+  zoneOutEpisodes: number;
+  spiralEpisodes: number;
+  distractionWindows: DistractionWindow[];
+  distractingApps: AppDistraction[];
+  tips: string | null;
+}
+
 export interface SessionDetail {
   summary: SessionSummary;
   timeline: TimelineBucket[];
   alerts: EventRow[];
   contexts: EventRow[];
   probes: EventRow[];
+  insights: SessionInsights;
 }
 
 export interface FocusWindow {
