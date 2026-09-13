@@ -1,4 +1,6 @@
-const GEMINI_MODEL = "gemini-2.0-flash";
+// gemini-2.0-flash was retired by Google; confirmed live against the API
+// (2026-09-13) that gemini-3.6-flash is the current replacement.
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 interface GenerateOptions {
   timeoutMs?: number;
