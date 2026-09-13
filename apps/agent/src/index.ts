@@ -10,6 +10,8 @@ import { Pipeline } from "./pipeline.js";
 import { ApiClient } from "./api-client.js";
 import { UploadScheduler } from "./upload-scheduler.js";
 import { initFileLogging, logBanner, logConfig, logSample, logShutdown } from "./logger.js";
+import { buildCameraPlan, describeCameraPlan, rememberCameraChoice } from "./camera-plan.js";
+import { acquireSingleInstance } from "./single-instance.js";
 import type { SampleMessage, StateMessage, WsMessage } from "@flow/shared";
 
 // ── Env ────────────────────────────────────────────────────────────
@@ -34,7 +36,7 @@ if (args.includes("--help") || args.includes("-h")) {
   console.log("  --real         Use SmartSpectra SDK with real camera");
   console.log("  --demo [file]  Replay a pre-recorded JSONL capture (default: demo-data/session-01.jsonl)");
   console.log("  --port <n>     WebSocket port (default: 8765)");
-  console.log("  --camera <n>   Camera device index (default: 0)");
+  console.log("  --camera <n>   Try this SmartSpectra camera device index first");
   console.log("  --help, -h     Show this help");
   process.exit(0);
 }
@@ -50,7 +52,22 @@ const demoPath =
 const portIdx = args.indexOf("--port");
 const port = portIdx >= 0 ? parseInt(args[portIdx + 1]!, 10) : 8765;
 const camIdx = args.indexOf("--camera");
-const cameraIndex = camIdx >= 0 ? parseInt(args[camIdx + 1]!, 10) : 0;
+const requestedCameraIndex = camIdx >= 0 ? parseInt(args[camIdx + 1]!, 10) : null;
+
+let instanceLock: ReturnType<typeof acquireSingleInstance> | null = null;
+try {
+  instanceLock = acquireSingleInstance(join(scriptDir, "..", "logs", "flow-agent.lock"));
+} catch (err: any) {
+  console.error(`[agent] ${err.message}`);
+  console.error("[agent] close the existing Flow Agent window before starting another one.");
+  process.exit(1);
+}
+
+const cameraPlan = buildCameraPlan({
+  cachePath: join(scriptDir, "..", "logs", "camera-preferences.json"),
+  requestedIndex: requestedCameraIndex,
+});
+const initialCameraIndex = cameraPlan.candidates[0] ?? 0;
 
 // ── Session (constructed first — its deviceId is needed below) ────
 const session = new Session({
@@ -93,6 +110,12 @@ const pipeline = new Pipeline({
 // ── WebSocket server ───────────────────────────────────────────────
 const server = new AgentWsServer({
   port,
+  onServerError: (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`[agent] port ${port} is already in use by another Flow agent`);
+      process.exit(1);
+    }
+  },
   onSessionControl: (msg) => {
     if (useDemo) {
       // Demo mode replays pre-classified messages verbatim — it bypasses
@@ -112,13 +135,14 @@ const server = new AgentWsServer({
     // (session.start() itself is idempotent-safe and just warns+no-ops,
     // but apiClient.startSession() has no such guard, so we gate it here).
     const wasIdle = msg.action === "start" && (session.phase === "idle" || session.phase === "ended");
+    const isPreflight = msg.session_id.startsWith("preflight-");
 
     session.handleControl(msg);
 
     if (msg.action === "start") {
       pipeline.startTracking();
       startEmitting();
-      if (wasIdle) {
+      if (wasIdle && !isPreflight) {
         // Register the session with the API in the background — don't
         // block sensing/broadcast on it. If it fails, currentSessionId
         // stays null and UploadScheduler drops accumulated data rather
@@ -128,15 +152,19 @@ const server = new AgentWsServer({
           currentSessionId = id;
           if (id) uploadScheduler.start();
         });
+      } else if (isPreflight) {
+        console.log(`[preflight] started ${msg.session_id}`);
       }
     } else if (msg.action === "end") {
       stopEmitting();
       pipeline.stop();
       uploadScheduler.stop();
-      if (currentSessionId) {
+      if (currentSessionId && !isPreflight) {
         const idToClose = currentSessionId;
         currentSessionId = null;
         void apiClient.endSession(idToClose);
+      } else if (isPreflight) {
+        console.log(`[preflight] ended ${msg.session_id}`);
       }
     } else if (msg.action === "pause") {
       stopEmitting();
@@ -151,6 +179,10 @@ const server = new AgentWsServer({
 // ── Sample handler ─────────────────────────────────────────────────
 function handleSample(sample: SampleMessage): void {
   if (!session.shouldEmit) return;
+  if (useReal && sampleLooksReal(sample)) {
+    samplesOnCurrentCamera++;
+    maybeConfirmCurrentCamera();
+  }
 
   // Route through pipeline (baseline → classifier → alerts)
   pipeline.processSample(sample);
@@ -184,14 +216,11 @@ function broadcastCameraRefused(reason: string): void {
 }
 
 // ── Camera auto-probe ────────────────────────────────────────────────
-// `--camera <n>` (or its default) is a guess: SmartSpectra's device index
-// doesn't necessarily match Windows' device order, and whatever webcam it
-// was last tuned for may not even be plugged in anymore. Rather than fail
-// once and quietly run the classifier on frozen fallback numbers, cycle
-// through a small set of candidate indices — the requested one first, then
-// 0-3 — retrying each once (a real driver hiccup is often transient) before
-// moving on. Only give up (fall back to mock) once every candidate fails.
-const cameraCandidates = Array.from(new Set([cameraIndex, 0, 1, 2, 3]));
+// SmartSpectra's Node SDK opens cameras by numeric device index, while the
+// demo setup is described by Windows device name ("HD Webcam"). Build an
+// index order from the requested index/env/cache plus a Windows inventory,
+// then prove the selected index with validation frames and decoded samples.
+const cameraCandidates = cameraPlan.candidates;
 let cameraCandidatePos = 0;
 let cameraAttempts = 0;
 const MAX_CAMERA_ATTEMPTS = cameraCandidates.length * 2;
@@ -203,15 +232,98 @@ const MAX_CAMERA_ATTEMPTS = cameraCandidates.length * 2;
 // proof it's usable, so track whether SmartSpectra has actually confirmed
 // a face on the current candidate, and if it hasn't within a short search
 // window, treat that the same as a hard failure and move to the next
-// candidate. A single kOk (0) isn't enough proof by itself -- the SDK
-// fires one immediately on open, before it's evaluated a real frame, so
-// require several *consecutive* kOk frames (real sustained detection is
-// continuous at capture framerate; a startup blip is not).
+// candidate. A single kOk (0) isn't enough proof by itself -- the SDK can
+// fire one before metrics are flowing, so require sustained face evidence
+// plus decoded samples from the current index.
 let faceFoundOnCurrentCamera = false;
-let consecutiveOkFrames = 0;
-const CONFIRM_OK_FRAMES = 10;
+let consecutiveFaceFrames = 0;
+let samplesOnCurrentCamera = 0;
+const CONFIRM_FACE_FRAMES = 10;
+const CONFIRM_REAL_SAMPLES = 3;
 let faceSearchTimer: NodeJS.Timeout | null = null;
 const FACE_SEARCH_WINDOW_MS = 12_000;
+
+// SmartSpectra reports a timestamp gap (SmartSpectraErrorCode.kTimestampGap
+// = 11) as a fatal, non-retryable error when delivered camera frames stall
+// or arrive late enough to break its timing assumptions -- usually a
+// camera/USB hiccup (see sdk-adapter.ts's useCamera() comment), not proof
+// the device is unusable. The SDK's own "retryable" flag says no, but in
+// practice a plain reset+restart on the SAME index recovers fine, so this
+// is treated as retryable at the agent level, capped so a genuinely
+// unstable camera still eventually falls back to mock instead of retrying
+// forever.
+const TIMESTAMP_GAP_ERROR_CODE = 11;
+let timestampGapRetries = 0;
+const MAX_TIMESTAMP_GAP_RETRIES = 5;
+// If a restart stays up this long without another gap error, treat the
+// camera as genuinely stable again and forgive earlier retries -- a rare
+// hiccup an hour into a session shouldn't count against the same cap as a
+// camera that's fundamentally unable to hold a framerate.
+const GAP_STABILITY_MS = 30_000;
+let gapStabilityTimer: NodeJS.Timeout | null = null;
+
+/** Restart capture on the SAME camera index -- for a transient pipeline
+ * hiccup, not evidence this is the wrong device (unlike tryNextCamera). */
+function restartCurrentCamera(reason: string): void {
+  const adapter = sdkAdapter;
+  if (!adapter) return;
+  console.warn(`[agent] ${reason} — restarting capture on the same camera`);
+  adapter.stop().finally(() => {
+    adapter.start();
+    // Only re-arm the face search if this camera hadn't already proven
+    // itself -- a mid-session hiccup on an already-confirmed camera
+    // shouldn't restart the "is this even the right camera" search.
+    if (!faceFoundOnCurrentCamera) armFaceSearchTimer();
+    if (gapStabilityTimer) clearTimeout(gapStabilityTimer);
+    gapStabilityTimer = setTimeout(() => {
+      timestampGapRetries = 0;
+    }, GAP_STABILITY_MS);
+  });
+}
+
+function sampleLooksReal(sample: SampleMessage): boolean {
+  return (
+    sample.pulse_bpm != null ||
+    sample.breathing_rpm != null ||
+    sample.hrv_ms != null ||
+    sample.eda_us != null ||
+    sample.conf != null ||
+    sample.landmarks != null
+  );
+}
+
+function validationMeansFaceVisible(code: number): boolean {
+  // kNoFaceFound is the one status that clearly says the current index is
+  // pointed away from the user. Other validation states can still be the
+  // right camera with imperfect framing/lighting.
+  return code !== 1;
+}
+
+function resetCameraEvidence(): void {
+  faceFoundOnCurrentCamera = false;
+  consecutiveFaceFrames = 0;
+  samplesOnCurrentCamera = 0;
+}
+
+function maybeConfirmCurrentCamera(): void {
+  if (faceFoundOnCurrentCamera) return;
+  if (consecutiveFaceFrames < CONFIRM_FACE_FRAMES || samplesOnCurrentCamera < CONFIRM_REAL_SAMPLES) {
+    return;
+  }
+  const index = cameraCandidates[cameraCandidatePos]!;
+  console.log(
+    `[agent] camera confirmed on device index ${index} (${consecutiveFaceFrames} validation frames, ${samplesOnCurrentCamera} samples)`
+  );
+  faceFoundOnCurrentCamera = true;
+  clearFaceSearchTimer();
+  rememberCameraChoice(cameraPlan, index);
+  server.broadcastRaw({
+    kind: "debug_camera",
+    deviceIndex: index,
+    preferredName: cameraPlan.preferredName,
+    ts: Date.now(),
+  });
+}
 
 function clearFaceSearchTimer(): void {
   if (faceSearchTimer) {
@@ -241,8 +353,7 @@ function tryNextCamera(reason: string): void {
   );
   const adapter = sdkAdapter;
   if (!adapter) return;
-  faceFoundOnCurrentCamera = false; // unproven on the new candidate
-  consecutiveOkFrames = 0;
+  resetCameraEvidence();
   adapter.stop().finally(() => {
     adapter.setCameraIndex(nextIndex);
     adapter.start();
@@ -277,26 +388,38 @@ async function startEmitting(): Promise<void> {
       }
       sdkAdapter = new SdkAdapter({
         apiKey,
-        cameraIndex,
+        cameraIndex: initialCameraIndex,
         onSample: handleSample,
         onValidation: (code, hint) => {
-          if (code === 0) {
-            consecutiveOkFrames++;
-            if (!faceFoundOnCurrentCamera && consecutiveOkFrames >= CONFIRM_OK_FRAMES) {
-              // Sustained kOk, not just the one-off blip the SDK fires on
-              // open before it's evaluated a real frame -- lock in this
-              // camera and stop searching for a "better" one.
-              console.log(`[agent] camera confirmed (${CONFIRM_OK_FRAMES} consecutive good frames)`);
-              faceFoundOnCurrentCamera = true;
-              clearFaceSearchTimer();
-            }
-            return;
+          if (validationMeansFaceVisible(code)) {
+            consecutiveFaceFrames++;
+            maybeConfirmCurrentCamera();
+          } else {
+            consecutiveFaceFrames = 0;
           }
-          consecutiveOkFrames = 0;
           // Diagnostic-only, outside the frozen WsMessage contract
-          server.broadcastRaw({ kind: "debug_validation", code, hint, ts: Date.now() });
+          if (code !== 0) {
+            server.broadcastRaw({ kind: "debug_validation", code, hint, ts: Date.now() });
+          }
         },
         onError: (code, message, retryable) => {
+          if (code === TIMESTAMP_GAP_ERROR_CODE) {
+            if (gapStabilityTimer) {
+              clearTimeout(gapStabilityTimer);
+              gapStabilityTimer = null;
+            }
+            timestampGapRetries++;
+            if (timestampGapRetries > MAX_TIMESTAMP_GAP_RETRIES) {
+              console.error(
+                `[agent] repeated frame-timing errors (${timestampGapRetries}) -- this camera can't sustain a stable framerate here, falling back to mock`
+              );
+              broadcastCameraRefused(`camera kept losing frame sync (${message})`);
+              startMock();
+              return;
+            }
+            restartCurrentCamera(`frame-timing error (${message}) (attempt ${timestampGapRetries}/${MAX_TIMESTAMP_GAP_RETRIES})`);
+            return;
+          }
           if (!retryable) {
             broadcastCameraRefused(message);
             return;
@@ -329,6 +452,10 @@ function startMock(): void {
 
 function stopEmitting(): void {
   clearFaceSearchTimer();
+  if (gapStabilityTimer) {
+    clearTimeout(gapStabilityTimer);
+    gapStabilityTimer = null;
+  }
   if (mockEmitter?.isRunning) {
     mockEmitter.stop();
   }
@@ -351,6 +478,8 @@ process.on("unhandledRejection", (reason) => {
 
 // ── Startup ────────────────────────────────────────────────────────
 logBanner();
+console.log(`[agent] single-instance lock: ${instanceLock.path}`);
+if (useReal) describeCameraPlan(cameraPlan);
 logConfig({
   mode: useDemo
     ? `demo (replay: ${demoPath})`
@@ -376,6 +505,7 @@ async function shutdown(): Promise<void> {
   }
   if (sdkAdapter) await sdkAdapter.destroy();
   await server.close();
+  instanceLock?.release();
   process.exit(0);
 }
 

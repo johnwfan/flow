@@ -115,14 +115,14 @@ export class SdkAdapter {
     this.cameraIndex = index;
   }
 
-  start(): void {
+  start(): boolean {
     if (!this.sdk) {
       console.error("[sdk] not initialized — call init() first");
-      return;
+      return false;
     }
     if (this.running) {
       console.warn("[sdk] start() called while already running — ignoring duplicate start");
-      return;
+      return true;
     }
     if (this.needsReset) {
       // Rebuild the native pipeline after a prior error. Without this, the
@@ -136,10 +136,23 @@ export class SdkAdapter {
       this.needsReset = false;
     }
     try {
-      this.sdk.useCamera({ deviceIndex: this.cameraIndex });
+      // Pin a conservative, near-universally-supported capture mode
+      // instead of leaving width/height/fps at "0 = SDK default". Left
+      // unset, some cheap UVC webcams (including ones rated for 60fps)
+      // negotiate a mode their USB bandwidth/MJPEG decode can't actually
+      // sustain, so real delivered frames arrive late/bursty. SmartSpectra
+      // then reports "Use a camera mode that provides at least 25 frames
+      // per second" (kFrameRateTooLow) and eventually hard-errors with
+      // kTimestampGap (a gap between frame timestamps) and shuts the
+      // pipeline down. rPPG doesn't need high resolution -- a stable
+      // framerate matters far more than pixel detail -- so 640x480@30fps
+      // trades resolution we don't need for framerate stability every UVC
+      // camera can actually sustain.
+      this.sdk.useCamera({ deviceIndex: this.cameraIndex, width: 640, height: 480, fps: 30 });
       this.sdk.start();
       this.running = true;
-      console.log(`[sdk] camera capture started (device index ${this.cameraIndex})`);
+      console.log(`[sdk] camera capture started (device index ${this.cameraIndex}, 640x480@30)`);
+      return true;
     } catch (err: any) {
       // The native binding throws synchronously (e.g. camera already in use
       // by another process, camera index doesn't exist, or a duplicate
@@ -149,6 +162,8 @@ export class SdkAdapter {
       console.error(`[sdk] start failed: ${err.message} — is another app using the camera?`);
       this.running = false;
       this.needsReset = true;
+      this.onError?.(-1, err.message, true);
+      return false;
     }
   }
 

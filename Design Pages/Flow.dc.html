@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: oklch(0.985 0.004 268);
+    --raise: oklch(1 0 0);
+    --sink: oklch(0.968 0.005 268);
+    --line: oklch(0.905 0.010 268);
+    --line-soft: oklch(0.935 0.008 268);
+    --tick: oklch(0.80 0.018 268);
+    --ink: oklch(0.22 0.028 268);
+    --body: oklch(0.44 0.024 268);
+    --mute: oklch(0.54 0.022 268);
+
+    --deep: oklch(0.56 0.185 258);
+    --deep-ink: oklch(0.42 0.17 258);
+    --deep-mid: oklch(0.72 0.13 258);
+    --deep-pale: oklch(0.87 0.06 258);
+    --zoned: oklch(0.66 0.038 248);
+    --zoned-ink: oklch(0.45 0.042 248);
+    --zoned-mid: oklch(0.76 0.030 248);
+    --zoned-pale: oklch(0.90 0.018 248);
+    --spiral: oklch(0.63 0.215 32);
+    --spiral-ink: oklch(0.47 0.19 32);
+    --spiral-mid: oklch(0.76 0.15 32);
+    --spiral-pale: oklch(0.90 0.065 32);
+    --break: oklch(0.80 0.105 82);
+    --break-ink: oklch(0.45 0.09 75);
+    --break-mid: oklch(0.86 0.085 82);
+    --break-pale: oklch(0.94 0.04 82);
+
+    --indigo: oklch(0.21 0.012 268);
+    --indigo-lift: oklch(0.27 0.012 268);
+    --indigo-hi: oklch(0.33 0.012 268);
+    --cat-1: oklch(0.38 0.010 268);
+    --cat-2: oklch(0.60 0.010 268);
+    --cat-3: oklch(0.78 0.008 268);
+    --cat-4: oklch(0.90 0.006 268);
+
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+    --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px; --r-pill: 999px;
+    --dur-1: 160ms; --dur-2: 280ms; --dur-3: 450ms;
+    --ease: cubic-bezier(.32,.72,0,1);
+    --sans: 'Instrument Sans', system-ui, sans-serif;
+    --mono: 'Geist Mono', ui-monospace, monospace;
+  }
+  [data-mode="dim"] {
+    --paper: oklch(0.935 0.008 268);
+    --raise: oklch(0.965 0.006 268);
+    --sink: oklch(0.915 0.010 268);
+    --line: oklch(0.865 0.014 268);
+    --line-soft: oklch(0.895 0.012 268);
+    --ink: oklch(0.26 0.030 268);
+    --body: oklch(0.42 0.026 268);
+    --mute: oklch(0.50 0.024 268);
+  }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  * { box-sizing: border-box; }
+  a { color: var(--deep-ink); text-decoration: none; }
+  a:hover { color: oklch(0.34 0.17 258); }
+  canvas { display: block; width: 100%; height: 100%; }
+  ::selection { background: oklch(0.22 0.028 268 / 0.12); }
+  button { font: inherit; cursor: pointer; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease); }
+  button:focus-visible { outline: none; box-shadow: 0 0 0 3px oklch(0.22 0.028 268 / 0.22); }
+  button:active { transform: translateY(1px); }
+  input { font: inherit; }
+  @keyframes flow-breathe { 0%, 100% { opacity: .4 } 50% { opacity: 1 } }
+  @keyframes flow-in { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+  @keyframes flow-load { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+  [data-navlink]:hover [data-roll] { transform: translateY(-19px); }
+  nav [data-navlink]:hover { color: var(--ink) !important; }
+  [data-btn="solid"]:hover { background: var(--indigo-hi) !important; }
+  [data-cta] { position: relative; overflow: hidden; transition: transform 260ms var(--ease), background 200ms var(--ease), box-shadow 260ms var(--ease); }
+  [data-cta]::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 55%; background: linear-gradient(100deg, transparent, oklch(1 0 0 / 0.26), transparent); transform: translateX(-180%); }
+  [data-cta]:hover::after { animation: flow-sheen 900ms var(--ease) forwards; }
+  [data-cta="light"]::after { background: linear-gradient(100deg, transparent, oklch(0.22 0.028 268 / 0.14), transparent); }
+  [data-cta]:hover { transform: translateY(-1px); box-shadow: 0 8px 22px oklch(0.22 0.028 268 / 0.16); }
+  [data-cta] [data-arrow] { display: inline-block; transition: transform 300ms var(--ease); }
+  [data-cta]:hover [data-arrow] { transform: translateX(4px); }
+  @keyframes flow-sheen { from { transform: translateX(-180%) } to { transform: translateX(320%) } }
+  [data-btn="quiet"]:hover { background: var(--sink) !important; }
+  [data-ghost]:hover { background: var(--sink) !important; color: var(--ink) !important; }
+  @media (max-width: 1180px) { [data-navmeta] { display: none; } }
+  [data-reveal] { opacity: 0; transform: translateY(16px); transition: opacity 760ms var(--ease), transform 760ms var(--ease); }
+  [data-reveal].is-in { opacity: 1; transform: none; }
+  [data-view] { animation: flow-in 460ms var(--ease) both; }
+  [data-sect] { position: relative; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: var(--s5); padding-top: var(--s7); }
+  [data-app] { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 30px; }
+  [data-row]:hover { background: var(--sink); }
+  [data-faq]:hover { background: var(--sink); }
+  @media (max-width: 900px) { [data-side] { width: 196px !important; } }
+  @media (max-width: 980px) {
+    [data-sect] { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+    [data-sect] [data-rule-v], [data-sect] [data-cross], [data-sect] [data-rule-r] { display: none; }
+    [data-sect] [data-rule-l] { right: 0 !important; width: auto !important; }
+    [data-app] { grid-template-columns: minmax(0, 1fr); gap: var(--s6); }
+    [data-app] [data-rule-v], [data-app] [data-cross], [data-app] [data-rule-r] { display: none; }
+    [data-app] [data-rule-l] { right: 0 !important; width: auto !important; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
+</style>
+</helmet>
+
+<div data-mode="{{ mode }}" style="min-height: 100vh; background: var(--paper); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased;">
+
+  <!-- ============ TOP NAV (landing only) ============ -->
+  <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ true }}">
+  <div style="position: sticky; top: 0; z-index: 50; background: oklch(0.985 0.004 268 / 0.86); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--line);">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 0 34px; height: 66px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--s5);">
+      <button onClick="{{ goLanding }}" style="justify-self: start; display: flex; align-items: center; gap: 10px; border: none; background: transparent; padding: 8px 0;">
+        <span data-soft style="width: 10px; height: 10px; border-radius: 999px; background: {{ markColor }}; flex: none;"></span>
+        <span style="font-size: 18px; font-weight: 600; letter-spacing: -0.04em; color: var(--ink);">Flow</span>
+      </button>
+
+      <nav style="display: flex; align-items: center; gap: var(--s1); justify-self: center;">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+          <button data-navlink onClick="{{ n.go }}" aria-current="{{ n.cur }}" style="{{ n.style }}">
+            <span style="display: block; overflow: hidden; height: 19px;">
+              <span data-roll style="display: block; transition: transform 420ms var(--ease);">
+                <span style="display: block; height: 19px; line-height: 19px;">{{ n.label }}</span>
+                <span aria-hidden="true" style="display: block; height: 19px; line-height: 19px;">{{ n.label }}</span>
+              </span>
+            </span>
+          </button>
+        </sc-for>
+      </nav>
+
+      <div style="justify-self: end; display: flex; align-items: center; gap: var(--s4);">
+        <sc-if value="{{ inApp }}" hint-placeholder-val="{{ false }}">
+          <span data-navmeta style="font-size: 12.5px; color: var(--mute); font-variant-numeric: tabular-nums; white-space: nowrap;">{{ navMeta }}</span>
+        </sc-if>
+        <button data-btn="{{ primaryNavKind }}" data-cta data-navlink onClick="{{ primaryNavAction }}" style="{{ primaryNavStyle }}">
+          <span style="display: block; overflow: hidden; height: 19px;">
+            <span data-roll style="display: block; transition: transform 420ms var(--ease);">
+              <span style="display: block; height: 19px; line-height: 19px;">{{ primaryNavLabel }}</span>
+              <span aria-hidden="true" style="display: block; height: 19px; line-height: 19px;">{{ primaryNavLabel }}</span>
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <div style="display: flex; align-items: stretch; min-height: 100vh;">
+
+    <sc-if value="{{ inApp }}" hint-placeholder-val="{{ false }}">
+      <aside data-side style="width: 248px; flex: none; position: sticky; top: 0; align-self: flex-start; height: 100vh; border-right: 1px solid var(--line); padding: 22px var(--s4) var(--s5); display: flex; flex-direction: column; gap: var(--s6);">
+        <button onClick="{{ goLanding }}" style="display: flex; align-items: center; gap: 10px; border: none; background: transparent; padding: 6px 8px;">
+          <span data-soft style="width: 10px; height: 10px; border-radius: 999px; background: {{ markColor }}; flex: none;"></span>
+          <span style="font-size: 18px; font-weight: 600; letter-spacing: -0.04em; color: var(--ink);">Flow</span>
+        </button>
+
+        <nav style="display: flex; flex-direction: column; gap: 2px;">
+          <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+            <button data-navlink onClick="{{ n.go }}" aria-current="{{ n.cur }}" style="{{ n.style }}">
+              <span style="display: block; overflow: hidden; height: 19px;">
+                <span data-roll style="display: block; transition: transform 420ms var(--ease);">
+                  <span style="display: block; height: 19px; line-height: 19px;">{{ n.label }}</span>
+                  <span aria-hidden="true" style="display: block; height: 19px; line-height: 19px;">{{ n.label }}</span>
+                </span>
+              </span>
+            </button>
+          </sc-for>
+        </nav>
+
+        <div style="margin-top: auto; display: flex; flex-direction: column; gap: var(--s3);">
+          <div style="height: 1px; background: var(--line-soft);"></div>
+          <div style="display: flex; align-items: center; gap: var(--s2); padding: 0 var(--s2);">
+            <span data-soft style="width: 6px; height: 6px; border-radius: 999px; background: {{ markColor }}; animation: flow-breathe 2.6s var(--ease) infinite;"></span>
+            <span style="font-size: 11.5px; color: var(--body); font-variant-numeric: tabular-nums;">{{ navMeta }}</span>
+          </div>
+          <div style="padding: 0 var(--s2); font-size: 11.5px; color: var(--mute); line-height: 1.5;">Frames stay on this machine. Camera-based physiological sensing.</div>
+          <button data-btn="{{ primaryNavKind }}" onClick="{{ primaryNavAction }}" style="{{ primaryNavStyle }}">{{ primaryNavLabel }}</button>
+        </div>
+      </aside>
+    </sc-if>
+
+  <main style="flex: 1; min-width: 0; padding: 0 34px 100px; max-width: 1240px; margin: 0 auto;">
+
+    <!-- ============ LANDING ============ -->
+    <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ true }}">
+      <div data-view="landing">
+        <div style="display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: var(--s8); align-items: center; padding: var(--s8) 0 var(--s9);">
+          <div style="min-width: 0;">
+            <div style="display: inline-flex; align-items: center; gap: var(--s2); padding: 7px 14px 7px 10px; border-radius: var(--r-pill); background: var(--raise); box-shadow: 0 0 0 1px var(--line);">
+              <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--deep); animation: flow-breathe 2.6s var(--ease) infinite;"></span>
+              <span style="font-size: 12.5px; color: var(--body); white-space: nowrap;">Runs locally · camera-based sensing</span>
+            </div>
+            <h1 style="margin: var(--s5) 0 0; font-size: clamp(44px, 5vw, 64px); line-height: 1.0; letter-spacing: -0.042em; font-weight: 500; max-width: 13ch; text-wrap: pretty;">Eyes on the page, brain gone.</h1>
+            <p style="margin: var(--s5) 0 0; font-size: 18px; line-height: 1.55; color: var(--body); max-width: 46ch; text-wrap: pretty;">Flow reads your pulse, breathing, blinks and gaze off a plain webcam, checks it against what's actually on your screen, and catches the state no timer can see — still looking, no longer there.</p>
+            <div style="display: flex; align-items: center; gap: var(--s3); margin-top: var(--s6); flex-wrap: wrap;">
+              <button data-cta onClick="{{ enterFlow }}" style="display: inline-flex; align-items: center; gap: 10px; padding: 15px 30px; border: none; border-radius: var(--r-pill); background: var(--indigo); color: oklch(1 0 0); font-size: 16px; font-weight: 600; letter-spacing: -0.015em; box-shadow: 0 2px 10px oklch(0.22 0.028 268 / 0.14);">Enter Flow <span data-arrow>&rarr;</span></button>
+              <button onClick="{{ goValidation }}" style="padding: 13px 22px; border: none; border-radius: var(--r-pill); background: var(--raise); color: var(--ink); font-size: 15px; font-weight: 500; box-shadow: 0 0 0 1px var(--line);">See if it actually works</button>
+            </div>
+            <div style="display: flex; gap: var(--s6); margin-top: var(--s7); flex-wrap: wrap;">
+              <sc-for list="{{ heroStats }}" as="s" hint-placeholder-count="3">
+                <div>
+                  <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;">{{ s.value }}</div>
+                  <div style="font-size: 11.5px; color: var(--mute); margin-top: 3px;">{{ s.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="min-width: 0; padding: var(--s5); border-radius: var(--r-xl); background: var(--raise); box-shadow: 0 0 0 1px var(--line);">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--s3);">
+              <div style="display: flex; align-items: center; gap: var(--s2);">
+                <span style="width: 7px; height: 7px; border-radius: 2.5px; background: var(--zoned);"></span>
+                <span style="font-family: var(--mono); font-size: 11px; color: var(--zoned-ink);">zoned_out</span>
+              </div>
+              <span style="font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums;">live · 3m20s</span>
+            </div>
+            <div style="margin-top: var(--s4); font-size: 23px; font-weight: 500; letter-spacing: -0.035em; line-height: 1.2; max-width: 22ch;">Pulse fell six. Blinks dropped to four a minute. Your eyes never left the page.</div>
+            <div style="height: 120px; margin-top: var(--s5);">
+              <canvas ref="{{ heroRef }}" role="img" aria-label="Live pulse waveform demonstration"></canvas>
+            </div>
+            <div style="display: flex; gap: 3px; height: 10px; border-radius: var(--r-pill); overflow: hidden; margin-top: var(--s4);">
+              <sc-for list="{{ ribbon }}" as="g" hint-placeholder-count="8">
+                <span style="{{ g.style }}"></span>
+              </sc-for>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: var(--s3); font-family: var(--mono); font-size: 10px; color: var(--mute);">
+              <span>deep_work</span><span>zoned_out</span><span>spiraling</span><span>break</span><span>no_signal</span>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div id="features">
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Features</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Four things Flow does, and nothing it doesn't.</div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s6) var(--s7);">
+            <sc-for list="{{ features }}" as="f" hint-placeholder-count="4">
+              <div>
+                <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">{{ f.tag }}</div>
+                <div style="margin-top: 10px; font-size: 19px; font-weight: 500; letter-spacing: -0.03em;">{{ f.title }}</div>
+                <div style="margin-top: var(--s2); font-size: 14px; line-height: 1.6; color: var(--body); max-width: 40ch; text-wrap: pretty;">{{ f.body }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div id="about">
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">About</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Why it behaves the way it does.</div>
+          </div>
+          <div>
+            <div style="font-size: 26px; font-weight: 500; letter-spacing: -0.035em; line-height: 1.3; max-width: 34ch; text-wrap: pretty;">Flow is a personal instrument, not a productivity score. It reports what the camera measured and leaves the judgement to you.</div>
+            <div style="margin-top: var(--s6);">
+              <sc-for list="{{ principles }}" as="p" hint-placeholder-count="3">
+                <div style="display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--s5); padding: var(--s4) 0; border-top: 1px solid var(--line-soft); align-items: start;">
+                  <span style="font-size: 15px; font-weight: 500; letter-spacing: -0.02em;">{{ p.title }}</span>
+                  <span style="font-size: 14px; line-height: 1.6; color: var(--body); max-width: 56ch; text-wrap: pretty;">{{ p.body }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div id="tech">
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Tech</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Placeholder — swap in the real stack before launch.</div>
+          </div>
+          <div>
+            <sc-for list="{{ tech }}" as="t" hint-placeholder-count="4">
+              <div style="display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--s5); padding: var(--s4) 0; border-top: 1px solid var(--line-soft); align-items: start;">
+                <span style="font-family: var(--mono); font-size: 11px; color: var(--ink);">{{ t.name }}</span>
+                <span style="font-size: 14px; line-height: 1.6; color: var(--body); max-width: 58ch; text-wrap: pretty;">{{ t.note }}</span>
+              </div>
+            </sc-for>
+            <div style="padding-top: var(--s4); border-top: 1px solid var(--line-soft); font-size: 11.5px; color: var(--mute); line-height: 1.5;">Placeholder copy. Versions, model names and latency figures to be confirmed.</div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div id="faq">
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">FAQ</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">The questions people actually ask first.</div>
+          </div>
+          <div>
+            <sc-for list="{{ faqs }}" as="q" hint-placeholder-count="5">
+              <div data-faq onClick="{{ q.toggle }}" style="padding: var(--s4) var(--s3); margin: 0 calc(var(--s3) * -1); border-top: 1px solid var(--line-soft); cursor: pointer; transition: background var(--dur-1) var(--ease);">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4);">
+                  <span style="font-size: 16px; font-weight: 500; letter-spacing: -0.02em;">{{ q.q }}</span>
+                  <span style="font-family: var(--mono); font-size: 14px; color: var(--tick);">{{ q.sign }}</span>
+                </div>
+                <sc-if value="{{ q.open }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top: 10px; font-size: 14px; line-height: 1.6; color: var(--body); max-width: 64ch; text-wrap: pretty;">{{ q.a }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <div style="border-top: 1px solid var(--line-soft);"></div>
+          </div>
+        </div>
+
+        <div data-cta style="margin-top: var(--s9); padding: var(--s8) var(--s7); border-radius: var(--r-xl); background: var(--indigo); color: oklch(1 0 0); display: flex; align-items: center; justify-content: space-between; gap: var(--s7); flex-wrap: wrap; box-shadow: none;">
+          <div>
+            <div style="font-size: 36px; font-weight: 500; letter-spacing: -0.045em; max-width: 18ch; line-height: 1.1;">Four minutes to a baseline. Then it just watches.</div>
+            <div style="margin-top: var(--s3); font-size: 14px; color: oklch(1 0 0 / 0.78); max-width: 52ch; line-height: 1.6;">No account, no upload, no scoring. Camera-based physiological sensing — not a medical device, and it diagnoses nothing.</div>
+          </div>
+          <button data-cta="light" onClick="{{ enterFlow }}" style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 32px; border: none; border-radius: var(--r-pill); background: oklch(1 0 0); color: var(--indigo); font-size: 16px; font-weight: 600; letter-spacing: -0.015em; box-shadow: none;">Enter Flow <span data-arrow>&rarr;</span></button>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ CONNECT / CALIBRATE ============ -->
+    <sc-if value="{{ isConnect }}" hint-placeholder-val="{{ false }}">
+      <div data-view="connect" style="padding-top: var(--s7);">
+        <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute); margin-bottom: 10px;">{{ connectEyebrow }}</div>
+        <h1 style="margin: 0; font-size: 36px; font-weight: 500; letter-spacing: -0.045em;">{{ connectTitle }}</h1>
+        <p style="margin: var(--s3) 0 0; font-size: 18px; line-height: 1.55; color: var(--body); max-width: 56ch; text-wrap: pretty;">{{ connectLede }}</p>
+
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--s7); margin-top: var(--s7); align-items: start;">
+          <div style="min-width: 0;">
+            <div style="border-radius: var(--r-lg); padding: var(--s5); box-shadow: 0 0 0 1px var(--line);">
+              <div style="display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: var(--s2);">
+                  <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--deep); animation: flow-breathe 2.6s var(--ease) infinite;"></span>
+                  <span style="font-size: 15px; font-weight: 600; letter-spacing: -0.02em;">Local agent connected</span>
+                </div>
+                <span style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">flow-agent · this machine</span>
+              </div>
+              <div style="margin-top: var(--s2); font-size: 13px; color: var(--body); line-height: 1.55; max-width: 56ch; text-wrap: pretty;">The agent holds the camera. It processes frames locally and sends this app numbers only — no video, no frames, nothing to upload.</div>
+              <div style="margin-top: var(--s5);">
+                <sc-for list="{{ streams }}" as="st" hint-placeholder-count="5">
+                  <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s4); padding: 10px 0; border-top: 1px solid var(--line-soft); align-items: baseline;">
+                    <span style="font-size: 13px; color: var(--ink);">{{ st.label }}</span>
+                    <span style="font-family: var(--mono); font-size: 10.5px; color: var(--mute); font-variant-numeric: tabular-nums;">{{ st.meta }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <sc-if value="{{ isCalibrating }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top: var(--s6);">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px;">
+                  <span style="font-size: 13px; color: var(--body);">Pulse · already reading</span>
+                  <span style="font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums;">rolling 20 s</span>
+                </div>
+                <div style="height: 130px;">
+                  <canvas ref="{{ calibRef }}" role="img" aria-label="Live pulse waveform during calibration"></canvas>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 7px; font-size: 10px; color: var(--mute); font-variant-numeric: tabular-nums;">
+                  <span>&minus;20s</span><span>&minus;15s</span><span>&minus;10s</span><span>&minus;5s</span><span>now</span>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="min-width: 0;">
+            <sc-if value="{{ isCalibrating }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size: 11.5px; color: var(--mute);">Learning your baseline</div>
+                <div style="display: flex; align-items: baseline; gap: var(--s2); margin-top: var(--s2);">
+                  <span style="font-size: 52px; font-weight: 500; letter-spacing: -0.055em; line-height: 0.9; font-variant-numeric: tabular-nums; color: var(--deep-ink);">{{ calibLeft }}</span>
+                  <span style="font-size: 14px; color: var(--mute);">left</span>
+                </div>
+                <div style="height: 4px; border-radius: var(--r-pill); background: var(--line-soft); margin-top: var(--s4); overflow: hidden;">
+                  <div style="height: 100%; border-radius: var(--r-pill); background: var(--deep); width: {{ calibPct }};"></div>
+                </div>
+                <div style="margin-top: var(--s3); font-size: 12.5px; color: var(--body); line-height: 1.55;">Waveforms are live already. Nothing will interrupt you until the baseline is set.</div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isConnecting }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <label style="display: block; font-size: 11.5px; color: var(--mute); margin-bottom: var(--s2);" for="flow-label">Session label · optional</label>
+                <input id="flow-label" value="{{ label }}" onChange="{{ setLabel }}" placeholder="Thesis chapter 3" style="width: 100%; padding: 11px 14px; border: none; border-radius: var(--r-pill); background: var(--sink); color: var(--ink); font-size: 13.5px; box-shadow: inset 0 1px 2px oklch(0.22 0.028 268 / 0.09);" />
+
+                <div style="margin-top: var(--s5); font-size: 11.5px; color: var(--mute);">Signal</div>
+                <div style="display: flex; align-items: center; gap: var(--s3); margin-top: var(--s2);">
+                  <div style="position: relative; flex: 1; height: 4px; border-radius: var(--r-pill); background: var(--line-soft);">
+                    <div data-soft style="position: absolute; inset: 0 auto 0 0; width: {{ confPct }}; border-radius: var(--r-pill); background: {{ confColor }};"></div>
+                    <div style="position: absolute; left: 55%; top: -5px; bottom: -5px; width: 1px; background: var(--tick);"></div>
+                  </div>
+                  <span style="width: 32px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums;">{{ conf }}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: var(--mute); font-variant-numeric: tabular-nums;">
+                  <span>0.0</span><span>alerts begin</span><span>1.0</span>
+                </div>
+                <div style="margin-top: 10px; font-size: 12.5px; color: var(--body); line-height: 1.55;">{{ confNote }}</div>
+
+                <div style="margin-top: var(--s6);">
+                  <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+                    <div style="display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: var(--s3); padding: 11px 0; border-top: 1px solid var(--line-soft);">
+                      <span style="font-family: var(--mono); font-size: 10.5px; color: var(--tick);">{{ s.n }}</span>
+                      <span style="font-size: 13px; line-height: 1.55; color: var(--body);">{{ s.text }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="display: flex; gap: var(--s2); margin-top: var(--s6); flex-wrap: wrap;">
+              <button onClick="{{ startPrimary }}" style="padding: 12px 22px; border: none; border-radius: var(--r-pill); background: var(--indigo); color: oklch(1 0 0); font-size: 14px; font-weight: 500; box-shadow: none;">{{ startPrimaryLabel }}</button>
+              <button onClick="{{ goLanding }}" style="padding: 12px 18px; border: none; border-radius: var(--r-pill); background: transparent; color: var(--body); font-size: 14px;">Back</button>
+            </div>
+            <div style="margin-top: var(--s4); font-size: 11.5px; color: var(--mute); line-height: 1.55;">Flow performs camera-based physiological sensing. It is not a medical device and diagnoses nothing.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ SESSION ============ -->
+    <sc-if value="{{ isSession }}" hint-placeholder-val="{{ false }}">
+      <div data-view="session" style="padding-top: var(--s5);">
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s6); flex-wrap: wrap;">
+          <div>
+            <div style="display: flex; align-items: center; gap: var(--s2); margin-bottom: 10px;">
+              <span data-soft style="width: 8px; height: 8px; border-radius: 2.5px; background: {{ stColor }}; animation: flow-breathe 2.6s var(--ease) infinite;"></span>
+              <span style="font-family: var(--mono); font-size: 10.5px; color: var(--mute); letter-spacing: 0.02em;">{{ sessionEyebrow }}</span>
+            </div>
+            <h1 style="margin: 0; font-size: 36px; font-weight: 500; letter-spacing: -0.045em; line-height: 1.05;">{{ label }}</h1>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;">
+            <span style="font-size: 11.5px; color: var(--mute);">Preview state</span>
+            <div role="radiogroup" aria-label="Preview state" style="display: flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); background: var(--sink); box-shadow: inset 0 1px 2px oklch(0.22 0.028 268 / 0.09);">
+              <sc-for list="{{ stateOptions }}" as="o" hint-placeholder-count="5">
+                <button onClick="{{ o.pick }}" role="radio" aria-checked="{{ o.checked }}" style="{{ o.style }}">{{ o.label }}</button>
+              </sc-for>
+            </div>
+            <button onClick="{{ toggleAlert }}" style="padding: 6px 13px; border: none; border-radius: var(--r-pill); background: transparent; color: var(--body); font-size: 11.5px;">{{ alertLabel }}</button>
+          </div>
+        </div>
+
+        <div data-app style="position: relative; padding-top: var(--s6); margin-top: var(--s5);">
+          <div data-rule-l style="position: absolute; top: 0; left: 0; right: 301px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; right: 0; width: 249px; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 10px; right: 275px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; right: 270px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+
+          <div style="min-width: 0; position: relative;">
+            <div style="display: flex; gap: var(--s6); align-items: flex-start; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 260px;">
+                <div style="display: flex; align-items: center; gap: var(--s2); margin-bottom: 14px;">
+                  <span data-soft style="width: 7px; height: 7px; border-radius: 2.5px; background: {{ stColor }};"></span>
+                  <span data-soft style="font-family: var(--mono); font-size: 12px; color: {{ stInk }};">{{ stName }}</span>
+                </div>
+                <div style="font-size: 32px; font-weight: 500; letter-spacing: -0.04em; line-height: 1.12; max-width: 24ch; text-wrap: pretty;">{{ stHeadline }}</div>
+                <div style="margin-top: 10px; font-size: 13.5px; color: var(--body); line-height: 1.5;">{{ stSince }}</div>
+              </div>
+              <sc-if value="{{ hasReasons }}" hint-placeholder-val="{{ true }}">
+                <div style="min-width: 186px;">
+                  <div style="font-size: 11.5px; color: var(--mute); margin-bottom: var(--s2);">What it saw</div>
+                  <sc-for list="{{ reasons }}" as="r" hint-placeholder-count="5">
+                    <div style="font-family: var(--mono); font-size: 10.5px; color: var(--body); padding: 6px 0; border-top: 1px solid var(--line-soft);">{{ r }}</div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+
+            <div data-soft style="margin-top: var(--s6); opacity: {{ plotOpacity }};">
+              <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 13px; color: var(--body);">Pulse</span>
+                <span style="font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums;">rolling 20 s</span>
+              </div>
+              <div style="position: relative; height: 160px;">
+                <canvas ref="{{ pulseRef }}" role="img" aria-label="{{ pulseAria }}"></canvas>
+                <sc-if value="{{ isLost }}" hint-placeholder-val="{{ false }}">
+                  <div style="position: absolute; inset: 0; background: repeating-linear-gradient(45deg, oklch(0.90 0.012 268 / 0.65) 0 5px, var(--paper) 5px 10px); display: flex; align-items: center; justify-content: center;">
+                    <span style="font-size: 11.5px; background: var(--paper); border-radius: var(--r-pill); color: var(--body); padding: 7px 14px; font-variant-numeric: tabular-nums;">signal lost · not interpolated</span>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="display: flex; align-items: baseline; justify-content: space-between; margin: var(--s5) 0 6px;">
+                <span style="font-size: 13px; color: var(--body);">Breathing</span>
+                <span style="font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums;">I:E {{ ie }}</span>
+              </div>
+              <div style="position: relative; height: 96px;">
+                <canvas ref="{{ breathRef }}" role="img" aria-label="{{ breathAria }}"></canvas>
+                <sc-if value="{{ isLost }}" hint-placeholder-val="{{ false }}">
+                  <div style="position: absolute; inset: 0; background: repeating-linear-gradient(45deg, oklch(0.90 0.012 268 / 0.65) 0 5px, var(--paper) 5px 10px);"></div>
+                </sc-if>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 7px; font-size: 10px; color: var(--mute); font-variant-numeric: tabular-nums;">
+                <span>&minus;20s</span><span>&minus;15s</span><span>&minus;10s</span><span>&minus;5s</span><span>now</span>
+              </div>
+            </div>
+
+            <div style="margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--line-soft); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s6);">
+              <div>
+                <div style="font-size: 11.5px; color: var(--mute); margin-bottom: 10px;">On screen</div>
+                <div style="font-size: 19px; font-weight: 500; letter-spacing: -0.03em;">Study</div>
+                <div style="font-size: 12.5px; color: var(--body); margin-top: 4px;">foreground 11 min unbroken</div>
+                <div style="display: flex; gap: 3px; height: 5px; border-radius: var(--r-pill); overflow: hidden; margin-top: 14px;">
+                  <span style="flex: 62; background: var(--cat-1);"></span>
+                  <span style="flex: 21; background: var(--cat-2);"></span>
+                  <span style="flex: 11; background: var(--cat-3);"></span>
+                  <span style="flex: 6; background: var(--cat-4);"></span>
+                </div>
+                <div style="display: flex; gap: var(--s3); margin-top: var(--s2); font-size: 10.5px; color: var(--mute); font-family: var(--mono); flex-wrap: wrap;">
+                  <span>study 62%</span><span>productivity 21%</span><span>comms 11%</span><span>other 6%</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size: 11.5px; color: var(--mute); margin-bottom: 10px;">Signal</div>
+                <div style="display: flex; align-items: center; gap: var(--s3);">
+                  <div style="position: relative; flex: 1; height: 4px; border-radius: var(--r-pill); background: var(--line-soft);">
+                    <div data-soft style="position: absolute; inset: 0 auto 0 0; width: {{ confPct }}; border-radius: var(--r-pill); background: {{ confColor }};"></div>
+                    <div style="position: absolute; left: 55%; top: -5px; bottom: -5px; width: 1px; background: var(--tick);"></div>
+                  </div>
+                  <span style="width: 32px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums;">{{ conf }}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 10px; color: var(--mute); font-variant-numeric: tabular-nums;">
+                  <span>0.0</span><span>alerts begin</span><span>1.0</span>
+                </div>
+                <div style="margin-top: 10px; font-size: 12.5px; color: var(--body); line-height: 1.5; max-width: 34ch;">{{ confNote }}</div>
+              </div>
+            </div>
+
+            <sc-if value="{{ hasAlert }}" hint-placeholder-val="{{ false }}">
+              <div role="alertdialog" aria-label="Intervention" style="position: absolute; bottom: 0; right: 0; width: min(420px, 100%); padding: var(--s5); border-radius: var(--r-xl); background: var(--raise); box-shadow: 0 0 0 1px var(--line), 0 16px 44px oklch(0.22 0.028 268 / 0.10);">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); padding-bottom: 9px; border-bottom: 2px solid {{ alertColor }};">
+                  <span style="font-family: var(--mono); font-size: 10.5px; color: {{ alertInk }};">{{ alertName }}</span>
+                  <span style="font-size: 11.5px; color: var(--mute);">{{ alertMeta }}</span>
+                </div>
+                <div style="margin-top: var(--s4); font-size: 25px; font-weight: 500; letter-spacing: -0.04em; line-height: 1.15;">{{ alertTitle }}</div>
+                <div style="margin-top: 10px; font-size: 13.5px; line-height: 1.5; color: var(--body); max-width: 42ch;">{{ alertBody }}</div>
+                <div style="display: flex; align-items: center; gap: var(--s2); margin-top: var(--s5); flex-wrap: wrap;">
+                  <button onClick="{{ dismissAlert }}" style="padding: 9px 17px; border: none; border-radius: var(--r-pill); background: var(--indigo); color: oklch(1 0 0); font-size: 13px; font-weight: 500; box-shadow: none;">{{ alertPrimary }}</button>
+                  <button onClick="{{ dismissAlert }}" style="padding: 9px 17px; border: none; border-radius: var(--r-pill); background: var(--raise); color: var(--ink); font-size: 13px; font-weight: 500; box-shadow: 0 0 0 1px var(--line);">{{ alertSecondary }}</button>
+                  <button onClick="{{ dismissAlert }}" style="padding: 9px 13px; border: none; border-radius: var(--r-pill); background: transparent; color: var(--body); font-size: 13px;">Not now</button>
+                </div>
+                <div style="margin-top: var(--s4); font-size: 11px; color: var(--mute); line-height: 1.5;">Camera-based physiological sensing. Declining is never scored.</div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="min-width: 0;">
+            <div style="font-size: 11.5px; color: var(--mute);">Right now</div>
+            <div style="display: flex; align-items: baseline; gap: var(--s2); margin-top: var(--s2);">
+              <span data-soft style="font-size: 56px; font-weight: 500; letter-spacing: -0.055em; line-height: 0.9; font-variant-numeric: tabular-nums; color: {{ stInk }};">{{ hr }}</span>
+              <span style="font-size: 14px; color: var(--mute);">bpm</span>
+            </div>
+            <div style="height: 26px; margin-top: var(--s3);">
+              <canvas ref="{{ sparkHrRef }}" role="img" aria-label="Heart rate over the last forty seconds"></canvas>
+            </div>
+            <div data-soft style="margin-top: 6px; font-size: 11.5px; font-variant-numeric: tabular-nums; color: {{ trendColor }};">{{ trend }}</div>
+
+            <div style="margin-top: var(--s5);">
+              <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="3">
+                <div style="padding: 11px 0; border-top: 1px solid var(--line-soft); display: flex; align-items: center; gap: var(--s3);">
+                  <span style="flex: 1; font-size: 12.5px; color: var(--body);">{{ m.label }}</span>
+                  <span style="width: 58px; height: 18px;"><canvas ref="{{ m.ref }}" role="img" aria-label="{{ m.aria }}"></canvas></span>
+                  <span style="width: 52px; text-align: right; font-size: 13px; font-variant-numeric: tabular-nums;">{{ m.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: var(--s3); margin-top: var(--s5);">
+              <span data-soft style="width: 7px; height: 7px; border-radius: 999px; background: {{ stColor }}; flex: none; animation: flow-breathe 2.6s var(--ease) infinite;"></span>
+              <div>
+                <div style="font-size: 12.5px; font-weight: 600;">Agent streaming</div>
+                <div style="font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums;">{{ streamMeta }}</div>
+              </div>
+            </div>
+
+            <div style="margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--line-soft);">
+              <div style="font-size: 15px; font-weight: 500; letter-spacing: -0.02em;">Where are you right now?</div>
+              <div style="display: flex; gap: var(--s2); margin-top: var(--s3); flex-wrap: wrap;">
+                <button data-soft style="{{ probeFocusStyle }}">Focused</button>
+                <button style="padding: 8px 15px; border: none; border-radius: var(--r-pill); background: var(--raise); color: var(--ink); font-size: 12.5px; font-weight: 500; box-shadow: 0 0 0 1px var(--line);">Drifting</button>
+              </div>
+              <div style="display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3);">
+                <span style="width: 18px; height: 18px; border-radius: 999px; border: 2px solid var(--line-soft); border-top-color: {{ stColor }}; display: inline-block;"></span>
+                <span style="font-size: 11.5px; color: var(--mute); font-variant-numeric: tabular-nums;">{{ probeLeft }}s · disappears on its own</span>
+              </div>
+              <div style="margin-top: var(--s2); font-size: 11.5px; color: var(--mute); line-height: 1.5;">There's no wrong answer.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ DASHBOARD ============ -->
+    <sc-if value="{{ isDash }}" hint-placeholder-val="{{ false }}">
+      <div data-view="dashboard" style="padding-top: var(--s5);">
+        <sc-if value="{{ justEnded }}" hint-placeholder-val="{{ false }}">
+          <div style="padding: var(--s5) var(--s6); border-radius: var(--r-xl); background: var(--raise); box-shadow: 0 0 0 1px var(--line); margin-bottom: var(--s7);">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s6); flex-wrap: wrap;">
+              <div style="min-width: 280px;">
+                <div style="display: flex; align-items: center; gap: var(--s2);">
+                  <span style="width: 7px; height: 7px; border-radius: 2.5px; background: var(--deep);"></span>
+                  <span style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">session ended · just now</span>
+                </div>
+                <div style="margin-top: var(--s3); font-size: 28px; font-weight: 500; letter-spacing: -0.04em; line-height: 1.15; max-width: 22ch; text-wrap: pretty;">{{ endedTitle }}</div>
+                <div style="display: flex; gap: 3px; height: 10px; border-radius: var(--r-pill); overflow: hidden; margin-top: var(--s4); max-width: 420px;">
+                  <sc-for list="{{ ribbon }}" as="g" hint-placeholder-count="8">
+                    <span style="{{ g.style }}"></span>
+                  </sc-for>
+                </div>
+                <div style="margin-top: var(--s4); font-size: 13.5px; color: var(--body); line-height: 1.55; max-width: 52ch;">The narrative is written and the timeline is ready. Nothing was uploaded.</div>
+              </div>
+              <div style="display: flex; gap: var(--s6); flex-wrap: wrap; align-items: flex-start;">
+                <sc-for list="{{ detailStats }}" as="s" hint-placeholder-count="4">
+                  <div>
+                    <div style="font-size: 11.5px; color: var(--mute); margin-bottom: 6px;">{{ s.label }}</div>
+                    <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; color: {{ s.color }};">{{ s.value }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display: flex; gap: var(--s2); margin-top: var(--s5); flex-wrap: wrap;">
+              <button onClick="{{ goDetail }}" style="padding: 11px 20px; border: none; border-radius: var(--r-pill); background: var(--indigo); color: oklch(1 0 0); font-size: 13.5px; font-weight: 500; box-shadow: none;">Read what happened</button>
+              <button onClick="{{ enterFlow }}" style="padding: 11px 20px; border: none; border-radius: var(--r-pill); background: var(--raise); color: var(--ink); font-size: 13.5px; font-weight: 500; box-shadow: 0 0 0 1px var(--line);">Start another</button>
+              <button onClick="{{ clearEnded }}" style="padding: 11px 16px; border: none; border-radius: var(--r-pill); background: transparent; color: var(--body); font-size: 13.5px;">Dismiss</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute); margin-bottom: 10px;">history · 14 sessions</div>
+        <h1 style="margin: 0; font-size: 36px; font-weight: 500; letter-spacing: -0.045em;">Your sessions</h1>
+        <p style="margin: var(--s3) 0 0; font-size: 18px; line-height: 1.55; color: var(--body); max-width: 58ch; text-wrap: pretty;">Every session keeps its own shape. The ribbon is the whole session at a glance — where you held, where you drifted, where the signal went.</p>
+
+        <div style="display: flex; gap: var(--s8); margin-top: var(--s6); flex-wrap: wrap;">
+          <sc-for list="{{ weekStats }}" as="s" hint-placeholder-count="4">
+            <div>
+              <div style="font-size: 11.5px; color: var(--mute); margin-bottom: 6px;">{{ s.label }}</div>
+              <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; color: {{ s.color }};">{{ s.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div data-sect style="margin-top: var(--s6);">
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Recent</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Newest first. Open one for the written account.</div>
+          </div>
+          <div>
+            <div style="display: flex; gap: var(--s5); padding-bottom: var(--s3); font-size: 10.5px; font-family: var(--mono); color: var(--mute);">
+              <span style="flex: 1;">session</span><span style="width: 110px; text-align: right;">duration</span>
+            </div>
+            <sc-for list="{{ sessions }}" as="c" hint-placeholder-count="4">
+              <div data-row onClick="{{ c.open }}" style="display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: var(--s5); padding: var(--s4) var(--s3); margin: 0 calc(var(--s3) * -1); border-top: 1px solid var(--line-soft); cursor: pointer; transition: background var(--dur-1) var(--ease);">
+                <div style="min-width: 0;">
+                  <div style="display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap;">
+                    <span style="font-size: 18px; font-weight: 600; letter-spacing: -0.025em;">{{ c.title }}</span>
+                    <span style="font-size: 12px; color: var(--mute);">{{ c.date }}</span>
+                  </div>
+                  <div style="display: flex; gap: 3px; height: 7px; border-radius: var(--r-pill); overflow: hidden; margin-top: 11px; max-width: 520px;">
+                    <sc-for list="{{ c.segs }}" as="g" hint-placeholder-count="6">
+                      <span style="{{ g.style }}"></span>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top: 10px; font-size: 12px; color: var(--mute);">{{ c.meta }}</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;">{{ c.dur }}</div>
+                  <div style="font-size: 10.5px; color: var(--mute); margin-top: 3px; font-variant-numeric: tabular-nums;">{{ c.deep }}</div>
+                </div>
+              </div>
+            </sc-for>
+            <div style="border-top: 1px solid var(--line-soft);"></div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ SESSION DETAIL ============ -->
+    <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+      <div data-view="detail" style="padding-top: var(--s5);">
+        <button onClick="{{ goDash }}" style="padding: 6px 13px; margin: 0 0 var(--s5) calc(var(--s3) * -1); border: none; border-radius: var(--r-pill); background: transparent; color: var(--body); font-size: 12.5px; white-space: nowrap;">&larr; All sessions</button>
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s7); flex-wrap: wrap;">
+          <div style="min-width: 300px;">
+            <div style="display: flex; align-items: center; gap: var(--s2); margin-bottom: 10px;">
+              <span style="width: 7px; height: 7px; border-radius: 2.5px; background: var(--deep);"></span>
+              <span style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">tue 9 sep · 14:12 – 15:24</span>
+            </div>
+            <h1 style="margin: 0; font-size: 36px; font-weight: 500; letter-spacing: -0.045em;">{{ label }}</h1>
+            <div style="display: flex; gap: 3px; height: 10px; border-radius: var(--r-pill); overflow: hidden; margin-top: var(--s4); max-width: 340px;">
+              <sc-for list="{{ ribbon }}" as="g" hint-placeholder-count="8">
+                <span style="{{ g.style }}"></span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display: flex; gap: var(--s7); flex-wrap: wrap;">
+            <sc-for list="{{ detailStats }}" as="s" hint-placeholder-count="4">
+              <div>
+                <div style="font-size: 11.5px; color: var(--mute); margin-bottom: 6px;">{{ s.label }}</div>
+                <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; color: {{ s.color }};">{{ s.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div data-sect style="margin-top: var(--s6);">
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">What happened</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Written for you from this session's own signal.</div>
+          </div>
+          <div>
+            <div style="font-size: 33px; font-weight: 500; letter-spacing: -0.04em; line-height: 1.2; max-width: 38ch; text-wrap: pretty;">You held a thirty-minute stretch, then lost it twice — both times right after a message came in.</div>
+            <p style="margin: var(--s5) 0 0; font-size: 18px; line-height: 1.6; color: var(--body); max-width: 68ch; text-wrap: pretty;">Your pulse settled seven minutes in and stayed there. At 14:49 your blink rate collapsed to four a minute while your gaze stayed on the page — the reading that says you were still looking, but not there. You came back on your own after the break. The second loss was different: breathing climbed to nineteen a minute over four minutes and your pulse went with it.</p>
+            <div style="margin-top: var(--s6);">
+              <sc-for list="{{ takeaways }}" as="t" hint-placeholder-count="3">
+                <div style="padding: var(--s4) 0; border-top: {{ t.rule }}; font-size: 15px; color: var(--ink); line-height: 1.5;">{{ t.text }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">How it went</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">States over the physiology, alerts where they fired, apps underneath.</div>
+          </div>
+          <div>
+            <div style="display: flex; gap: var(--s4); flex-wrap: wrap; font-size: 10.5px; font-family: var(--mono); color: var(--body); margin-bottom: var(--s5);">
+              <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
+                <span style="display: inline-flex; align-items: center; gap: 6px;"><span style="{{ l.chip }}"></span>{{ l.label }}</span>
+              </sc-for>
+            </div>
+            <div style="position: relative; height: 20px;">
+              <sc-for list="{{ markers }}" as="m" hint-placeholder-count="2">
+                <span style="{{ m.style }}">{{ m.label }}</span>
+              </sc-for>
+            </div>
+            <div style="display: flex; gap: 3px; height: 18px; border-radius: var(--r-pill); overflow: hidden;">
+              <sc-for list="{{ ribbon }}" as="g" hint-placeholder-count="8">
+                <span style="{{ g.style }}"></span>
+              </sc-for>
+            </div>
+            <div style="position: relative; height: 152px; margin-top: var(--s4);">
+              <canvas ref="{{ traceRef }}" role="img" aria-label="Heart rate across the session with an HRV envelope and a gap where the signal was lost"></canvas>
+              <sc-for list="{{ stems }}" as="s" hint-placeholder-count="2">
+                <span style="{{ s.style }}"></span>
+              </sc-for>
+            </div>
+            <div style="display: flex; gap: 3px; height: 6px; border-radius: var(--r-pill); overflow: hidden; margin-top: var(--s3);">
+              <sc-for list="{{ catRibbon }}" as="g" hint-placeholder-count="6">
+                <span style="{{ g.style }}"></span>
+              </sc-for>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 7px; font-size: 10px; color: var(--mute); font-variant-numeric: tabular-nums;">
+              <span>14:12</span><span>14:30</span><span>14:48</span><span>15:06</span><span>15:24</span>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Check-ins</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">What you said, against what the classifier thought at that moment.</div>
+          </div>
+          <div>
+            <sc-for list="{{ probes }}" as="p" hint-placeholder-count="4">
+              <div style="display: grid; grid-template-columns: 62px 90px 22px minmax(0, 1fr) 86px; gap: var(--s3); align-items: center; padding: 11px 0; border-top: 1px solid var(--line-soft); font-size: 12.5px;">
+                <span style="font-variant-numeric: tabular-nums; color: var(--mute);">{{ p.time }}</span>
+                <span style="color: var(--ink);">{{ p.said }}</span>
+                <span style="color: var(--tick);">&rarr;</span>
+                <span style="font-family: var(--mono); font-size: 10.5px; color: var(--body);">{{ p.pred }}</span>
+                <span style="text-align: right; font-size: 11.5px; color: {{ p.color }};">{{ p.verdict }}</span>
+              </div>
+            </sc-for>
+            <div style="display: flex; gap: var(--s7); margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line);">
+              <div><div style="font-size: 11.5px; color: var(--mute);">Agreement</div><div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin-top: 4px;">3 of 4</div></div>
+              <div><div style="font-size: 11.5px; color: var(--mute);">Check-ins</div><div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin-top: 4px;">4</div></div>
+              <div><div style="font-size: 11.5px; color: var(--mute);">False alarms</div><div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin-top: 4px;">1</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">When Flow stepped in</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Two interventions, and what changed after each.</div>
+          </div>
+          <div>
+            <sc-for list="{{ interventions }}" as="i" hint-placeholder-count="2">
+              <div style="padding: var(--s5) 0; border-top: 1px solid var(--line-soft);">
+                <div style="display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;">
+                  <span style="width: 7px; height: 7px; border-radius: 2.5px; background: {{ i.color }};"></span>
+                  <span style="font-family: var(--mono); font-size: 10.5px; color: {{ i.ink }};">{{ i.name }}</span>
+                  <span style="font-size: 11.5px; color: var(--mute);">{{ i.meta }}</span>
+                </div>
+                <div style="margin-top: 10px; font-size: 15px; line-height: 1.55; color: var(--ink); max-width: 62ch; text-wrap: pretty;">{{ i.result }}</div>
+                <div style="display: flex; gap: var(--s6); margin-top: var(--s4); flex-wrap: wrap; font-variant-numeric: tabular-nums;">
+                  <sc-for list="{{ i.measures }}" as="m" hint-placeholder-count="2">
+                    <div>
+                      <div style="font-size: 10.5px; font-family: var(--mono); color: var(--mute);">{{ m.label }}</div>
+                      <div style="font-size: 17px; font-weight: 500; letter-spacing: -0.03em; margin-top: 4px;">{{ m.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+            <div style="padding-top: var(--s4); border-top: 1px solid var(--line-soft); font-size: 11.5px; color: var(--mute); line-height: 1.5;">All figures are camera-based physiological estimates, not clinical measurements.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ INSIGHTS ============ -->
+    <sc-if value="{{ isInsights }}" hint-placeholder-val="{{ false }}">
+      <div data-view="insights" style="padding-top: var(--s5);">
+        <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute); margin-bottom: 10px;">across 14 sessions · 16 h 40 m</div>
+        <h1 style="margin: 0; font-size: 36px; font-weight: 500; letter-spacing: -0.045em;">Patterns</h1>
+        <p style="margin: var(--s3) 0 0; font-size: 18px; line-height: 1.55; color: var(--body); max-width: 58ch; text-wrap: pretty;">What holds across sessions, not what happened in one. Nothing here is drawn until there's enough signal behind it.</p>
+
+        <div data-sect style="margin-top: var(--s6);">
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Focus window</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">How long deep work survives before the first drift.</div>
+          </div>
+          <div>
+            <div style="display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap;">
+              <span style="font-size: 52px; font-weight: 500; letter-spacing: -0.055em; line-height: 0.9; font-variant-numeric: tabular-nums; color: var(--deep-ink);">34</span>
+              <span style="font-size: 18px; color: var(--body);">minutes, then attention starts to go</span>
+            </div>
+            <div style="height: 150px; margin-top: var(--s5);">
+              <canvas ref="{{ curveRef }}" role="img" aria-label="Decay curve showing sustained focus falling away after about thirty-four minutes"></canvas>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 7px; font-size: 10px; color: var(--mute); font-variant-numeric: tabular-nums;">
+              <span>0m</span><span>20m</span><span>40m</span><span>60m</span><span>80m</span>
+            </div>
+            <div style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
+              <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">written for you</div>
+              <div style="margin-top: 8px; font-size: 15px; line-height: 1.55; color: var(--ink); max-width: 62ch; text-wrap: pretty;">{{ focusNote }}</div>
+            </div>
+            <div style="margin-top: var(--s4); font-size: 12.5px; color: var(--mute); line-height: 1.55; max-width: 62ch;">Measured as time from session start to the first sustained zoned-out stretch, across 11 sessions with usable signal.</div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Effort by app</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Where the deep-work minutes actually went.</div>
+          </div>
+          <div>
+            <sc-for list="{{ bars }}" as="b" hint-placeholder-count="5">
+              <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr) 62px; gap: var(--s3); align-items: center; padding: 9px 0;">
+                <span style="font-size: 12.5px; color: var(--body);">{{ b.label }}</span>
+                <span style="height: 10px; border-radius: var(--r-pill); background: var(--sink); display: block; overflow: hidden;">
+                  <span style="{{ b.fill }}"></span>
+                </span>
+                <span style="text-align: right; font-size: 12.5px; font-variant-numeric: tabular-nums;">{{ b.value }}</span>
+              </div>
+            </sc-for>
+            <div style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
+              <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">written for you</div>
+              <div style="margin-top: 8px; font-size: 15px; line-height: 1.55; color: var(--ink); max-width: 62ch; text-wrap: pretty;">{{ effortNote }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Time to settle</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Minutes from session start to the first stable deep-work stretch.</div>
+          </div>
+          <div>
+            <div style="display: flex; align-items: baseline; gap: var(--s3);">
+              <span style="font-size: 24px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;">7 m</span>
+              <span style="font-size: 13px; color: var(--body);">last session · down from 14 m eight sessions ago</span>
+            </div>
+            <div style="height: 120px; margin-top: var(--s4);">
+              <canvas ref="{{ settleRef }}" role="img" aria-label="Line chart of time to settle falling from fourteen to seven minutes across eight sessions"></canvas>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 7px; font-size: 10px; color: var(--mute); font-variant-numeric: tabular-nums;">
+              <span>8 ago</span><span>6</span><span>4</span><span>2</span><span>last</span>
+            </div>
+            <div style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
+              <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">written for you</div>
+              <div style="margin-top: 8px; font-size: 15px; line-height: 1.55; color: var(--ink); max-width: 62ch; text-wrap: pretty;">{{ settleNote }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Breaks &amp; interventions</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Which breaks restored you, and whether the breathing loop moved anything.</div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s7);">
+            <div>
+              <div style="font-size: 11.5px; color: var(--mute); margin-bottom: var(--s3);">Break quality</div>
+              <sc-for list="{{ breaks }}" as="b" hint-placeholder-count="2">
+                <div style="padding: 11px 0; border-top: 1px solid var(--line-soft); display: flex; align-items: center; gap: var(--s3);">
+                  <span style="width: 7px; height: 7px; border-radius: 2.5px; background: {{ b.color }}; flex: none;"></span>
+                  <span style="flex: 1; font-size: 13px; color: var(--ink);">{{ b.label }}</span>
+                  <span style="font-size: 13px; font-variant-numeric: tabular-nums;">{{ b.value }}</span>
+                </div>
+              </sc-for>
+              <div style="margin-top: var(--s3); font-size: 12.5px; color: var(--body); line-height: 1.55; max-width: 40ch;">Restorative means your pulse came back below baseline before you returned. Scrolling breaks mostly didn't.</div>
+            </div>
+            <div>
+              <div style="font-size: 11.5px; color: var(--mute); margin-bottom: var(--s3);">Breathing loop, before &rarr; after</div>
+              <sc-for list="{{ efficacy }}" as="e" hint-placeholder-count="3">
+                <div style="padding: 11px 0; border-top: 1px solid var(--line-soft);">
+                  <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute);">{{ e.label }}</div>
+                  <div style="margin-top: 5px; font-size: 17px; font-weight: 500; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;">{{ e.value }}</div>
+                </div>
+              </sc-for>
+              <div style="margin-top: var(--s3); font-size: 12.5px; color: var(--body); line-height: 1.55; max-width: 40ch;">Across 9 completed loops. Two were declined; declining is not counted against you.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ VALIDATION ============ -->
+    <sc-if value="{{ isValid }}" hint-placeholder-val="{{ false }}">
+      <div data-view="validation" style="padding-top: var(--s5);">
+        <div style="font-family: var(--mono); font-size: 10.5px; color: var(--mute); margin-bottom: 10px;">n = 84 check-ins · 14 sessions</div>
+        <h1 style="margin: 0; font-size: 36px; font-weight: 500; letter-spacing: -0.045em;">Does it actually know?</h1>
+        <p style="margin: var(--s3) 0 0; font-size: 18px; line-height: 1.55; color: var(--body); max-width: 62ch; text-wrap: pretty;">Every check-in you answer is scored against what the classifier predicted at that exact timestamp. Here is the whole record, including where it was wrong.</p>
+
+        <div data-sect style="margin-top: var(--s6);">
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">Prediction vs. self-report</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Rows are what the classifier said. Columns are what you said.</div>
+          </div>
+          <div>
+            <div style="max-width: 470px;">
+              <div style="display: grid; grid-template-columns: 108px minmax(0, 1fr) minmax(0, 1fr); gap: var(--s2); align-items: end; margin-bottom: var(--s2);">
+                <span></span>
+                <span style="font-size: 12.5px; color: var(--body); text-align: center;">you said focused</span>
+                <span style="font-size: 12.5px; color: var(--body); text-align: center;">you said drifting</span>
+              </div>
+              <sc-for list="{{ matrixRows }}" as="r" hint-placeholder-count="2">
+                <div style="display: grid; grid-template-columns: 108px minmax(0, 1fr) minmax(0, 1fr); gap: var(--s2); margin-bottom: var(--s2); align-items: stretch;">
+                  <span style="font-family: var(--mono); font-size: 10.5px; color: var(--body); align-self: center;">{{ r.label }}</span>
+                  <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="2">
+                    <span style="{{ c.style }}">{{ c.value }}</span>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display: flex; gap: var(--s7); margin-top: var(--s6); padding-top: var(--s4); border-top: 1px solid var(--line); flex-wrap: wrap;">
+              <sc-for list="{{ validStats }}" as="s" hint-placeholder-count="3">
+                <div>
+                  <div style="font-size: 11.5px; color: var(--mute);">{{ s.label }}</div>
+                  <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin-top: 5px;">{{ s.value }}</div>
+                  <div style="font-size: 11.5px; color: var(--mute); margin-top: 4px;">{{ s.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div data-sect>
+          <div data-rule-l style="position: absolute; top: 0; left: 0; width: 199px; height: 1px; background: var(--line);"></div>
+          <div data-rule-r style="position: absolute; top: 0; left: 229px; right: 0; height: 1px; background: var(--line);"></div>
+          <div data-rule-v style="position: absolute; top: 14px; bottom: 22px; left: 220px; width: 1px; background: var(--line-soft);"></div>
+          <div data-cross style="position: absolute; top: -5px; left: 215px; width: 11px; height: 11px;">
+            <div style="position: absolute; top: 5px; left: 0; width: 11px; height: 1px; background: var(--tick);"></div>
+            <div style="position: absolute; left: 5px; top: 0; width: 1px; height: 11px; background: var(--tick);"></div>
+          </div>
+          <div>
+            <div style="font-size: 23px; font-weight: 500; letter-spacing: -0.04em;">What this isn't</div>
+            <div style="margin-top: var(--s2); font-size: 13px; color: var(--mute); line-height: 1.5;">Stated plainly, in the same place as the numbers.</div>
+          </div>
+          <div>
+            <sc-for list="{{ limits }}" as="l" hint-placeholder-count="4">
+              <div style="padding: var(--s4) 0; border-top: 1px solid var(--line-soft); font-size: 15px; line-height: 1.55; color: var(--body); max-width: 68ch; text-wrap: pretty;">{{ l }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </main>
+  </div>
+
+  <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+    <div style="position: fixed; inset: 0; z-index: 200; background: var(--paper); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s6); animation: flow-in 300ms var(--ease) both;">
+      <div style="display: flex; align-items: center; gap: 11px;">
+        <span style="width: 11px; height: 11px; border-radius: 999px; background: var(--ink); animation: flow-breathe 1.6s var(--ease) infinite;"></span>
+        <span style="font-size: 21px; font-weight: 600; letter-spacing: -0.04em;">Flow</span>
+      </div>
+      <div style="width: 190px; height: 2px; border-radius: var(--r-pill); background: var(--line-soft); overflow: hidden;">
+        <div style="height: 100%; background: var(--ink); transform-origin: left; animation: flow-load 1900ms cubic-bezier(.32,.72,0,1) both;"></div>
+      </div>
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--mute); height: 14px;">{{ loadLine }}</div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;mode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;day&quot;,&quot;dim&quot;],&quot;default&quot;:&quot;day&quot;,&quot;tsType&quot;:&quot;'day' | 'dim'&quot;,&quot;section&quot;:&quot;Display&quot;},&quot;live&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Display&quot;}}">
+class Component extends DCLogic {
+  static S = {
+    deep_work: { name: 'deep_work', color: 'var(--deep)', ink: 'var(--deep-ink)', trace: '--deep', pale: '--deep-pale',
+      headline: 'You\u2019re in it. Nothing needed.', since: 'Holding for 18 minutes \u00b7 longest stretch today',
+      reasons: ['HR steady 61', 'I:E 1 : 1.9', 'blink 15 /min', 'gaze on-task 94%', 'no app switches 11m'],
+      t: { hr: 61, hrv: 78, br: 12.8, blink: 15, conf: 0.91 }, ie: '1 : 1.9' },
+    zoned_out: { name: 'zoned_out', color: 'var(--zoned)', ink: 'var(--zoned-ink)', trace: '--zoned', pale: '--zoned-pale',
+      headline: 'Eyes on the page, attention gone.', since: 'Drifting for 3m20s \u00b7 pulse down 6 bpm',
+      reasons: ['HR fell 6 bpm', 'blink 4 /min', 'gaze fixed 88%', 'no scroll 2m10s'],
+      t: { hr: 55, hrv: 92, br: 11.8, blink: 4, conf: 0.86 }, ie: '1 : 2.2' },
+    spiraling: { name: 'spiraling', color: 'var(--spiral)', ink: 'var(--spiral-ink)', trace: '--spiral', pale: '--spiral-pale',
+      headline: 'Breathing is climbing with you.', since: 'Rising for 4 minutes \u00b7 3 app switches',
+      reasons: ['HR up 81', 'I:E 1 : 1.1', 'blink 21 /min', 'gaze off-task 39%', '4 switches 3m'],
+      t: { hr: 81, hrv: 48, br: 18.6, blink: 21, conf: 0.83 }, ie: '1 : 1.1' },
+    break: { name: 'break', color: 'var(--break)', ink: 'var(--break-ink)', trace: '--break', pale: '--break-pale',
+      headline: 'Away from the screen. Good.', since: 'Off-task 6 minutes \u00b7 nothing is being scored',
+      reasons: [], t: { hr: 67, hrv: 84, br: 14.2, blink: 17, conf: 0.74 }, ie: '1 : 1.6' },
+    warmup: { name: 'warmup', color: 'var(--deep-mid)', ink: 'var(--deep-ink)', trace: '--deep-mid', pale: '--deep-pale',
+      headline: 'Still learning what normal looks like for you.', since: 'Warmup \u00b7 nothing is being judged yet',
+      reasons: [], t: { hr: 64, hrv: 74, br: 13.4, blink: 16, conf: 0.52 }, ie: '1 : 1.7' },
+    no_signal: { name: 'no_signal', color: 'var(--tick)', ink: 'var(--body)', trace: '--tick', pale: '--sink',
+      headline: 'Lost your face for a moment.', since: 'Nothing is being inferred while the signal is gone.',
+      reasons: [], t: { hr: 61, hrv: 78, br: 12.8, blink: 15, conf: 0.28 }, ie: '\u2013' }
+  };
+
+  static SCHEDULE = [[0,7,'break'],[7,37,'deep_work'],[37,42,'zoned_out'],[42,45,'break'],[45,55,'deep_work'],[55,59,'no_signal'],[59,68,'spiraling'],[68,72,'deep_work']];
+  static ALERTS = [{ min: 37, kind: 'zone-out' }, { min: 59, kind: 'spiral' }];
+  static CATS = [[0,12,'--cat-4'],[12,30,'--cat-1'],[30,38,'--cat-2'],[38,45,'--cat-4'],[45,58,'--cat-1'],[58,66,'--cat-3'],[66,72,'--cat-2']];
+
+  state = { view: 'landing', phase: 'connect', st: 'deep_work', mode: 'day', alert: null,
+    elapsed: 1094, probeLeft: 17, calib: 240, faq: 0, ended: false, sec: '', loading: false, loadStep: 0, label: 'Thesis chapter 3',
+    hr: 61, hrv: 78, br: 12.8, blink: 15, conf: 0.91 };
+
+  pulseRef = React.createRef(); breathRef = React.createRef(); sparkHrRef = React.createRef();
+  sparkHrvRef = React.createRef(); sparkBrRef = React.createRef(); sparkBlRef = React.createRef();
+  traceRef = React.createRef(); curveRef = React.createRef(); settleRef = React.createRef();
+  heroRef = React.createRef(); calibRef = React.createRef();
+
+  componentDidMount() {
+    const t = Component.S[this.state.st].t;
+    this.hist = { hr: [], hrv: [], br: [], blink: [] };
+    for (let i = 0; i < 40; i++) { this.hist.hr.push(t.hr); this.hist.hrv.push(t.hrv); this.hist.br.push(t.br); this.hist.blink.push(t.blink); }
+    if (this.props.mode && this.props.mode !== this.state.mode) this.setState({ mode: this.props.mode });
+    this.iv = setInterval(() => this.step(), 1000);
+    this.loop = () => { this.draw(); this.raf = requestAnimationFrame(this.loop); };
+    this.raf = requestAnimationFrame(this.loop);
+    this.reveal();
+  }
+  componentDidUpdate() { this.reveal(); }
+  componentWillUnmount() {
+    clearInterval(this.iv); cancelAnimationFrame(this.raf);
+    if (this.onScroll) { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.onScroll); }
+  }
+
+  reveal() {
+    document.querySelectorAll('[data-view="landing"] [data-sect], [data-view="landing"] [data-cta]').forEach(el => {
+      if (el.dataset.revealSet) return;
+      el.dataset.revealSet = '1';
+      el.setAttribute('data-reveal', '');
+    });
+    if (!this.onScroll) {
+      this.onScroll = () => this.checkReveal();
+      window.addEventListener('scroll', this.onScroll, { passive: true });
+      window.addEventListener('resize', this.onScroll, { passive: true });
+    }
+    this.checkReveal();
+  }
+  checkReveal() {
+    const vh = window.innerHeight;
+    document.querySelectorAll('[data-reveal]:not(.is-in)').forEach(el => {
+      if (el.getBoundingClientRect().top < vh * 0.92) el.classList.add('is-in');
+    });
+  }
+
+  step() {
+    if (this.props.live === false) return;
+    const t = Component.S[this.state.st].t;
+    const e = (v, tgt, j) => v + (tgt - v) * 0.16 + (Math.random() - 0.5) * j;
+    this.setState(s => {
+      const hr = +e(s.hr, t.hr, 1.1).toFixed(1), hrv = +e(s.hrv, t.hrv, 2.2).toFixed(1);
+      const br = +e(s.br, t.br, 0.35).toFixed(1), blink = +e(s.blink, t.blink, 0.8).toFixed(1);
+      this.hist.hr.push(hr); this.hist.hrv.push(hrv); this.hist.br.push(br); this.hist.blink.push(blink);
+      Object.keys(this.hist).forEach(k => { if (this.hist[k].length > 40) this.hist[k].shift(); });
+      const calibrating = s.view === 'connect' && s.phase === 'calibrating';
+      return { hr, hrv, br, blink, conf: +e(s.conf, calibrating ? 0.72 : t.conf, 0.012).toFixed(3),
+        elapsed: s.view === 'session' ? s.elapsed + 1 : s.elapsed,
+        calib: calibrating ? Math.max(0, s.calib - 1) : s.calib,
+        probeLeft: s.probeLeft > 0 ? s.probeLeft - 1 : 20 };
+    });
+  }
+
+  css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  fit(c) {
+    const r = c.getBoundingClientRect(); if (!r.width) return null;
+    const d = window.devicePixelRatio || 1;
+    if (c.width !== Math.round(r.width * d)) { c.width = Math.round(r.width * d); c.height = Math.round(r.height * d); }
+    const ctx = c.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.clearRect(0, 0, r.width, r.height);
+    return { ctx, w: r.width, h: r.height };
+  }
+  grid(ctx, w, h, rows) {
+    ctx.strokeStyle = this.css('--line-soft') || '#e9e9ef'; ctx.lineWidth = 1;
+    for (let i = 1; i < rows; i++) { const y = Math.round(h / rows * i) + 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    for (let i = 1; i < 4; i++) { const x = Math.round(w / 4 * i) + 0.5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  }
+  path(ctx, pts, stroke, fill, lw, h) {
+    if (fill) { ctx.beginPath(); ctx.moveTo(pts[0][0], h); pts.forEach(p => ctx.lineTo(p[0], p[1])); ctx.lineTo(pts[pts.length - 1][0], h); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); }
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+  }
+  spark(ref, data, color) {
+    const c = ref.current; if (!c) return; const f = this.fit(c); if (!f) return;
+    const { ctx, w, h } = f, lo = Math.min(...data), hi = Math.max(...data), sp = hi - lo || 1;
+    const pts = data.map((v, i) => [i / (data.length - 1) * w, h - 2 - (v - lo) / sp * (h - 5)]);
+    this.path(ctx, pts, color, null, 1.4, h);
+    ctx.beginPath(); ctx.arc(pts[pts.length - 1][0] - 1, pts[pts.length - 1][1], 1.9, 0, 6.3); ctx.fillStyle = color; ctx.fill();
+  }
+  pulseInto(ref, stroke, fill, rows) {
+    const c = ref.current; if (!c) return; const f = this.fit(c); if (!f) return;
+    const { ctx, w, h } = f; this.grid(ctx, w, h, rows);
+    const now = performance.now() / 1000, n = Math.round(w), pts = [];
+    for (let i = 0; i <= n; i++) {
+      const tt = now - (1 - i / n) * 20, ph = (tt * this.state.hr / 60) % 1;
+      const y = Math.sin(ph * 6.283) * 0.55 + Math.sin(ph * 12.566 + 0.7) * 0.28 + Math.sin(ph * 18.85 + 1.9) * 0.09;
+      pts.push([i / n * w, h / 2 - y * (h / 2 - 12)]);
+    }
+    this.path(ctx, pts, stroke, fill, 2, h);
+    const l = pts[pts.length - 1]; ctx.beginPath(); ctx.arc(l[0] - 1.5, l[1], 2.8, 0, 6.3); ctx.fillStyle = stroke; ctx.fill();
+  }
+
+  draw() {
+    const v = Component.S[this.state.st], lost = this.state.st === 'no_signal';
+    const stroke = lost ? this.css('--tick') : this.css(v.trace);
+    const fill = lost ? this.css('--sink') : this.css(v.pale);
+
+    this.pulseInto(this.pulseRef, stroke, fill, 3);
+    this.pulseInto(this.calibRef, this.css('--deep'), this.css('--deep-pale'), 3);
+    this.pulseInto(this.heroRef, this.css('--zoned'), this.css('--zoned-pale'), 3);
+
+    const b = this.breathRef.current;
+    if (b) { const f = this.fit(b); if (f) {
+      const { ctx, w, h } = f; this.grid(ctx, w, h, 2);
+      const now = performance.now() / 1000, n = Math.round(w), rate = this.state.br / 60, pts = [];
+      for (let i = 0; i <= n; i++) {
+        const tt = now - (1 - i / n) * 20, ph = (tt * rate) % 1;
+        const y = ph < 0.36 ? Math.sin(ph / 0.36 * 1.5708) : Math.cos((ph - 0.36) / 0.64 * 1.5708);
+        pts.push([i / n * w, h - 8 - y * (h - 20)]);
+      }
+      this.path(ctx, pts, stroke, fill, 1.8, h);
+    } }
+
+    if (this.hist) {
+      this.spark(this.sparkHrRef, this.hist.hr, stroke);
+      this.spark(this.sparkHrvRef, this.hist.hrv, this.css('--mute'));
+      this.spark(this.sparkBrRef, this.hist.br, this.css('--mute'));
+      this.spark(this.sparkBlRef, this.hist.blink, this.css('--mute'));
+    }
+    this.drawTrace(); this.drawCurve(); this.drawSettle();
+  }
+
+  drawTrace() {
+    const c = this.traceRef.current; if (!c) return; const f = this.fit(c); if (!f) return;
+    const { ctx, w, h } = f; this.grid(ctx, w, h, 4);
+    const total = 72, deep = this.css('--deep'), pale = this.css('--deep-pale');
+    const at = m => { const s = Component.SCHEDULE.find(x => m >= x[0] && m < x[1]); return s ? s[2] : 'deep_work'; };
+    const segs = []; let cur = null;
+    for (let m = 0; m <= total; m += 0.5) {
+      const st = at(Math.min(m, total - 0.01));
+      if (st === 'no_signal') { cur = null; continue; }
+      const base = Component.S[st].t.hr, wob = Math.sin(m * 1.7) * 1.6 + Math.sin(m * 0.6) * 2.2;
+      const val = base + wob, y = h - 10 - (val - 45) / 45 * (h - 22);
+      const env = Component.S[st].t.hrv / 24;
+      if (!cur) { cur = []; segs.push(cur); }
+      cur.push([m / total * w, y, y - env, y + env]);
+    }
+    segs.forEach(sg => {
+      ctx.beginPath(); sg.forEach(p => ctx.lineTo(p[0], p[2]));
+      for (let i = sg.length - 1; i >= 0; i--) ctx.lineTo(sg[i][0], sg[i][3]);
+      ctx.closePath(); ctx.fillStyle = pale; ctx.fill();
+      this.path(ctx, sg.map(p => [p[0], p[1]]), deep, null, 1.8, h);
+    });
+    const g0 = 55 / total * w, g1 = 59 / total * w;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(g0, 0, g1 - g0, h); ctx.clip();
+    ctx.fillStyle = this.css('--paper'); ctx.fillRect(g0, 0, g1 - g0, h);
+    ctx.strokeStyle = this.css('--tick'); ctx.lineWidth = 1;
+    for (let x = g0 - h; x < g1 + h; x += 6) { ctx.beginPath(); ctx.moveTo(x, h); ctx.lineTo(x + h, 0); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  drawCurve() {
+    const c = this.curveRef.current; if (!c) return; const f = this.fit(c); if (!f) return;
+    const { ctx, w, h } = f; this.grid(ctx, w, h, 3);
+    const pts = [], n = 120;
+    for (let i = 0; i <= n; i++) { const x = i / n, y = 0.96 * Math.exp(-1.05 * x * 2.2) + 0.08; pts.push([x * w, h - 6 - y * (h - 16)]); }
+    this.path(ctx, pts, this.css('--deep'), this.css('--deep-pale'), 1.8, h);
+    const kx = 0.42 * w, ky = pts[Math.round(0.42 * n)][1];
+    ctx.strokeStyle = this.css('--tick'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(kx + 0.5, 0); ctx.lineTo(kx + 0.5, h); ctx.stroke();
+    ctx.beginPath(); ctx.arc(kx, ky, 3, 0, 6.3); ctx.fillStyle = this.css('--deep-ink'); ctx.fill();
+  }
+
+  drawSettle() {
+    const c = this.settleRef.current; if (!c) return; const f = this.fit(c); if (!f) return;
+    const { ctx, w, h } = f; this.grid(ctx, w, h, 3);
+    const d = [14, 12, 11, 13, 9, 10, 8, 7], lo = 5, hi = 16;
+    const pts = d.map((v, i) => [i / (d.length - 1) * (w - 12) + 6, h - 8 - (v - lo) / (hi - lo) * (h - 20)]);
+    this.path(ctx, pts, this.css('--deep'), null, 1.8, h);
+    pts.forEach((p, i) => { ctx.beginPath(); ctx.arc(p[0], p[1], i === pts.length - 1 ? 3.2 : 2, 0, 6.3); ctx.fillStyle = i === pts.length - 1 ? this.css('--deep-ink') : this.css('--deep-mid'); ctx.fill(); });
+  }
+
+  tex(st) {
+    const map = {
+      deep_work: 'var(--deep)',
+      zoned_out: 'repeating-linear-gradient(0deg, oklch(1 0 0 / 0.5) 0 1px, transparent 1px 4px), var(--zoned)',
+      spiraling: 'repeating-linear-gradient(45deg, oklch(1 0 0 / 0.45) 0 1.5px, transparent 1.5px 5px), var(--spiral)',
+      break: 'radial-gradient(oklch(1 0 0 / 0.55) 1px, transparent 1.2px) 0 0 / 6px 6px, var(--break)',
+      warmup: 'repeating-linear-gradient(90deg, oklch(1 0 0 / 0.55) 0 1px, transparent 1px 5px), var(--deep-mid)',
+      no_signal: 'repeating-linear-gradient(45deg, oklch(0.90 0.012 268) 0 4px, oklch(0.962 0.006 268) 4px 8px)'
+    };
+    return map[st] || 'var(--deep)';
+  }
+  fmt(s) { const m = Math.floor(s / 60), ss = s % 60; return m + ':' + String(ss).padStart(2, '0'); }
+
+  renderVals() {
+    const s = this.state, v = Component.S[s.st], lost = s.st === 'no_signal';
+    const go = view => () => { this.setState({ view }); window.scrollTo(0, 0); };
+    const inApp = s.view !== 'landing';
+
+    const landingNav = [['features', 'Features'], ['about', 'About'], ['tech', 'Tech'], ['faq', 'FAQ']];
+    const appNav = [['session', 'Session'], ['dashboard', 'Sessions'], ['insights', 'Insights'], ['validation', 'Validation']];
+    const linkStyle = on => inApp
+      ? 'display: block; width: 100%; text-align: left; padding: 10px 12px; border: none; border-radius: 10px; font-size: 14px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; background: ' + (on ? 'var(--sink)' : 'transparent') + '; color: ' + (on ? 'var(--ink)' : 'var(--body)') + '; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);'
+      : 'position: relative; padding: 10px 14px; border: none; background: transparent; font-size: 14px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; color: ' + (on ? 'var(--ink)' : 'var(--mute)') + '; transition: color var(--dur-1) var(--ease);';
+    const nav = inApp
+      ? appNav.map(n => ({ label: n[1], go: go(n[0]), cur: s.view === n[0] || (n[0] === 'dashboard' && s.view === 'detail') ? 'page' : undefined,
+          style: linkStyle(s.view === n[0] || (n[0] === 'dashboard' && s.view === 'detail')) }))
+      : landingNav.map(n => ({ label: n[1], cur: s.sec === n[0] ? 'true' : undefined, style: linkStyle(s.sec === n[0]),
+          go: () => {
+            this.setState({ sec: n[0] });
+            const el = document.getElementById(n[0]);
+            if (el) window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 96));
+          } }));
+
+    const btn = 'padding: ' + (inApp ? '11px 20px; width: 100%;' : '9px 20px;') + ' border: none; border-radius: var(--r-pill); font-size: 13.5px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; ';
+    const primaryBtn = btn + 'background: var(--indigo); color: oklch(1 0 0); box-shadow: none;';
+    const quietBtn = btn + 'background: transparent; color: var(--ink); box-shadow: 0 0 0 1px var(--line);';
+
+    const enterFlow = () => {
+      window.scrollTo(0, 0);
+      this.setState({ view: 'connect', phase: 'connect', calib: 240, ended: false, conf: 0.62, loading: true, loadStep: 0 });
+      [[620, 1], [1240, 2]].forEach(p => setTimeout(() => this.setState({ loadStep: p[1] }), p[0]));
+      setTimeout(() => this.setState({ loading: false }), 1980);
+    };
+    const endSession = () => { this.setState({ view: 'dashboard', ended: true, alert: null }); window.scrollTo(0, 0); };
+
+    const segStyle = (fl, st) => 'flex: ' + fl + '; background: ' + this.tex(st) + ';';
+    const ribbon = Component.SCHEDULE.map(x => ({ style: segStyle(x[1] - x[0], x[2]) }));
+    const catRibbon = Component.CATS.map(x => ({ style: 'flex: ' + (x[1] - x[0]) + '; background: var(' + x[2] + ');' }));
+    const mkSegs = arr => arr.map(x => ({ style: segStyle(x[1] - x[0], x[2]) }));
+
+    const trendDelta = +(s.hr - (this.hist ? this.hist.hr[0] : s.hr)).toFixed(1);
+    const alertMap = {
+      zone: { name: 'zone_out', color: 'var(--zoned)', ink: 'var(--zoned-ink)', meta: 'soft chime',
+        title: 'You\u2019ve been still for 90 seconds.', body: 'Pulse down six, blinks down to four a minute, gaze parked on the same paragraph. Two minutes of paced breathing usually brings this back.',
+        primary: '2-min reset', secondary: 'Take a break' },
+      spiral: { name: 'spiral', color: 'var(--spiral)', ink: 'var(--spiral-ink)', meta: 'voice-guided',
+        title: 'Your breathing is running ahead of you.', body: 'Nineteen breaths a minute and climbing for four minutes. A longer exhale will pull it down \u2014 four in, eight out, for two minutes.',
+        primary: 'Start the loop', secondary: 'Take a break' }
+    };
+    const al = s.alert ? alertMap[s.alert] : null;
+    const calibrating = s.view === 'connect' && s.phase === 'calibrating';
+    const confVal = lost && s.view === 'session' ? 0.28 : s.conf;
+
+    const faqData = [
+      ['Does anything leave my machine?', 'No. The frames are processed by a local agent and never uploaded. There is no account and no login \u2014 the app is tied to this device.'],
+      ['What is it actually reading?', 'Pulse and breathing from tiny colour changes in your face, plus blink rate and gaze direction. That is camera-based physiological sensing \u2014 not a medical device, and it diagnoses nothing.'],
+      ['Why four minutes of calibration?', 'Your resting pulse and breathing are yours. Flow needs a few minutes of you being normal before a change means anything. Waveforms are live the whole time.'],
+      ['What happens if the camera loses me?', 'The plots hatch, the numbers blank, and alerts stop. Nothing is interpolated and no state is guessed from a missing signal.'],
+      ['Can I ignore an intervention?', 'Always, in one click. Declining is never recorded as a failure and never affects your figures.']
+    ];
+
+    return {
+      pulseRef: this.pulseRef, breathRef: this.breathRef, sparkHrRef: this.sparkHrRef,
+      traceRef: this.traceRef, curveRef: this.curveRef, settleRef: this.settleRef,
+      heroRef: this.heroRef, calibRef: this.calibRef,
+
+      mode: s.mode, nav, inApp, markColor: inApp ? v.color : 'var(--indigo)',
+      goLanding: go('landing'), goDash: go('dashboard'), goDetail: go('detail'), goValidation: go('validation'),
+      enterFlow,
+      streams: [
+        { label: 'Pulse & variability', meta: '20 Hz \u00b7 0.2 s ago' },
+        { label: 'Breathing rate', meta: '20 Hz \u00b7 0.2 s ago' },
+        { label: 'Blink rate & gaze', meta: '20 Hz \u00b7 0.2 s ago' },
+        { label: 'Expression & speech', meta: '20 Hz \u00b7 0.2 s ago' },
+        { label: 'Foreground app', meta: 'on change \u00b7 study' }
+      ],
+      streamMeta: '20 readings/s \u00b7 last packet 0.2 s',
+      focusNote: 'Your attention holds about thirty-four minutes before the first real drop \u2014 and it has been consistent enough across eleven sessions to plan around. Try ending a block at thirty rather than pushing to fifty.',
+      effortNote: 'Study apps carry most of your deep work, but communication is where every drift so far has started. Nothing here says close Slack \u2014 it does say the first forty seconds after opening it are the ones that cost you.',
+      settleNote: 'You are settling roughly twice as fast as eight sessions ago. Whatever you changed about how you start, it is working.',
+      isLoading: s.loading,
+      loadLine: ['waking the local agent', 'opening the camera', 'warming the classifier'][s.loadStep || 0],
+      navMeta: s.view === 'session' ? 'elapsed ' + this.fmt(s.elapsed) : '14 sessions \u00b7 local only',
+      primaryNavLabel: !inApp ? 'Enter Flow' : (s.view === 'session' ? 'End session' : 'Start a session'),
+      primaryNavAction: !inApp ? enterFlow : (s.view === 'session' ? endSession : enterFlow),
+      primaryNavStyle: (!inApp || s.view === 'session') ? primaryBtn : quietBtn,
+      primaryNavKind: (!inApp || s.view === 'session') ? 'solid' : 'quiet',
+
+      isLanding: s.view === 'landing', isConnect: s.view === 'connect', isSession: s.view === 'session',
+      isDash: s.view === 'dashboard', isDetail: s.view === 'detail', isInsights: s.view === 'insights',
+      isValid: s.view === 'validation',
+
+      heroStats: [
+        { value: '~34 min', label: 'median focus window' }, { value: '82%', label: 'agreement with self-report' },
+        { value: '0 bytes', label: 'leaves your machine' }
+      ],
+      features: [
+        { tag: '01 \u00b7 sensing', title: 'Pulse and breathing, no wearable', body: 'A plain webcam is enough. Flow reads heart rate, breathing, blink rate and gaze, and shows you the raw waveform \u2014 not a score out of ten.' },
+        { tag: '02 \u00b7 the hard part', title: 'The state nothing else measures', body: 'Timers see an open document. Flow sees your pulse fall, blinks collapse and gaze freeze \u2014 eyes on the page, brain gone \u2014 and names it.' },
+        { tag: '03 \u00b7 in the moment', title: 'It intervenes, once, and softly', body: 'A chime and a card after ninety seconds of drift. Voice-guided breathing when you are spiralling. Every offer is refusable in one click.' },
+        { tag: '04 \u00b7 afterwards', title: 'A written account, not a scoreboard', body: 'Each session ends in a narrative written from your own signal, a timeline you can read, and an honest record of where the classifier was wrong.' }
+      ],
+      tech: [
+        { name: 'rPPG sensing', note: 'Placeholder \u2014 remote photoplethysmography via the Presage SDK, running against the local camera stream.' },
+        { name: 'local agent', note: 'Placeholder \u2014 a small background process pairs physiology with the active window and app category. Nothing is sent off-device.' },
+        { name: 'classifier', note: 'Placeholder \u2014 rules plus a light model over rolling physiology and context windows; emits a state and the reasons behind it.' },
+        { name: 'narratives', note: 'Placeholder \u2014 Gemini writes the post-session account from the session\u2019s own derived figures, never from raw frames.' },
+        { name: 'storage', note: 'Placeholder \u2014 local database keyed to a device id. No account, no sync, no export by default.' }
+      ],
+      principles: [
+        { title: 'Observed, never diagnosed', body: 'Flow says your pulse fell and your blinks collapsed. It does not say you were tired, distracted or failing. The reading is the claim; the meaning is yours.' },
+        { title: 'Offers, not instructions', body: 'Every intervention is refusable in one click, and refusing is never counted against you. A coach that is impressed with you every session is not paying attention.' },
+        { title: 'Evidence or silence', body: 'Below 0.55 confidence Flow keeps reading but stops interrupting, missing data is hatched rather than guessed, and a session without enough signal gets its timeline but no narrative.' },
+        { title: 'Yours, on your machine', body: 'No account, no upload, no sync. A device id you never see is the whole of the identity model.' }
+      ],
+      faqs: faqData.map((f, i) => ({ q: f[0], a: f[1], open: s.faq === i, sign: s.faq === i ? '\u2212' : '+',
+        toggle: () => this.setState(p => ({ faq: p.faq === i ? -1 : i })) })),
+
+      connectEyebrow: calibrating ? 'calibrating \u00b7 detectors muted' : 'connect \u00b7 nothing recorded yet',
+      connectTitle: calibrating ? 'Learning your baseline.' : 'Ready when you are.',
+      connectLede: calibrating
+        ? 'Four minutes of you being normal. The waveforms are already live \u2014 this is the reading, not a loading screen.'
+        : 'The agent is running and the signal is good. Name the session if you want to, then start \u2014 Flow takes four minutes to learn your baseline before it says anything.',
+      isCalibrating: calibrating, isConnecting: !calibrating,
+      calibLeft: this.fmt(s.calib), calibPct: Math.round((1 - s.calib / 240) * 100) + '%',
+      label: s.label, setLabel: e => this.setState({ label: e.target.value }),
+      steps: [
+        { n: '01', text: 'Four minutes of calibration. Waveforms are live from the first second; nothing will interrupt you.' },
+        { n: '02', text: 'Alerts arm once confidence holds above 0.55. Below that Flow keeps reading and stays quiet.' },
+        { n: '03', text: 'End whenever you like. The narrative is written from the session you actually had.' }
+      ],
+      startPrimaryLabel: calibrating ? 'Skip to live session' : 'Start session',
+      startPrimary: calibrating ? go('session') : () => this.setState({ phase: 'calibrating', calib: 240 }),
+
+      stName: v.name, stColor: v.color, stInk: v.ink, stHeadline: v.headline, stSince: v.since,
+      reasons: v.reasons, hasReasons: v.reasons.length > 0, isLost: lost, ie: v.ie,
+      sessionEyebrow: s.st === 'warmup' ? 'live session \u00b7 detectors muted'
+        : (lost || confVal < 0.55) ? 'live session \u00b7 alerts paused' : 'live session \u00b7 alerts armed',
+      hr: lost ? '\u2013\u2013' : Math.round(s.hr),
+      conf: confVal.toFixed(2), confPct: Math.round(confVal * 100) + '%',
+      confColor: confVal < 0.55 ? 'var(--tick)' : (inApp && s.view === 'session' ? v.color : 'var(--deep)'),
+      confNote: confVal < 0.55 ? 'Below threshold. Flow keeps reading, but stops interrupting.' : 'Above threshold. Alerts are armed.',
+      plotOpacity: al ? 0.35 : 1,
+      trend: lost ? 'no signal' : (trendDelta > 0 ? '+' : '') + trendDelta.toFixed(1) + ' / 40s',
+      trendColor: lost ? 'var(--mute)' : (trendDelta > 1.5 ? 'var(--spiral-ink)' : trendDelta < -1.5 ? 'var(--zoned-ink)' : 'var(--mute)'),
+      pulseAria: 'Pulse waveform, currently ' + Math.round(s.hr) + ' beats per minute, state ' + v.name,
+      breathAria: 'Breathing waveform, currently ' + s.br.toFixed(1) + ' breaths per minute',
+      metrics: [
+        { label: 'Variability', value: lost ? '\u2013\u2013' : Math.round(s.hrv) + ' ms', ref: this.sparkHrvRef, aria: 'Heart rate variability trend' },
+        { label: 'Breathing', value: lost ? '\u2013\u2013' : s.br.toFixed(1) + ' /min', ref: this.sparkBrRef, aria: 'Breathing rate trend' },
+        { label: 'Blinks', value: lost ? '\u2013\u2013' : Math.round(s.blink) + ' /min', ref: this.sparkBlRef, aria: 'Blink rate trend' }
+      ],
+      probeLeft: s.probeLeft,
+      probeFocusStyle: 'padding: 8px 15px; border: none; border-radius: var(--r-pill); background: var(--sink); color: ' + v.ink + '; font-size: 12.5px; font-weight: 500; box-shadow: inset 0 0 0 1px ' + v.color + ';',
+      stateOptions: Object.keys(Component.S).map(k => ({
+        label: k === 'deep_work' ? 'focused' : k === 'zoned_out' ? 'zoned' : k === 'spiraling' ? 'spiral' : k === 'no_signal' ? 'lost' : k,
+        checked: s.st === k, pick: () => this.setState({ st: k }),
+        style: 'padding: 6px 12px; border: none; border-radius: var(--r-pill); font-family: var(--mono); font-size: 10.5px; background: ' + (s.st === k ? 'var(--raise)' : 'transparent') + '; color: ' + (s.st === k ? 'var(--ink)' : 'var(--mute)') + '; box-shadow: ' + (s.st === k ? '0 0 0 1px var(--line)' : 'none') + ';'
+      })),
+      hasAlert: !!al, alertName: al && al.name, alertColor: al && al.color, alertInk: al && al.ink,
+      alertMeta: al && al.meta, alertTitle: al && al.title, alertBody: al && al.body,
+      alertPrimary: al && al.primary, alertSecondary: al && al.secondary,
+      alertLabel: s.alert ? 'Hide intervention' : 'Preview intervention',
+      toggleAlert: () => this.setState(p => ({ alert: p.alert ? null : (p.st === 'spiraling' ? 'spiral' : 'zone') })),
+      dismissAlert: () => this.setState({ alert: null }),
+
+      justEnded: s.ended, clearEnded: () => this.setState({ ended: false }),
+      endedTitle: 'Forty-four minutes of deep work, and two moments worth reading about.',
+
+      weekStats: [
+        { label: 'This week', value: '6 sessions', color: 'var(--ink)' },
+        { label: 'Deep work', value: '4 h 12 m', color: 'var(--deep-ink)' },
+        { label: 'Median settle', value: '8 m', color: 'var(--ink)' },
+        { label: 'Mean signal', value: '0.86', color: 'var(--ink)' }
+      ],
+      sessions: [
+        { title: s.label || 'Untitled session', date: 'Today \u00b7 14:12', dur: '1:12', deep: '61% deep', meta: '2 interventions \u00b7 settled in 7 m \u00b7 signal 0.88', open: go('detail'), segs: mkSegs(Component.SCHEDULE) },
+        { title: 'Reading \u2014 Kahneman', date: 'Yesterday \u00b7 09:40', dur: '0:48', deep: '44% deep', meta: '1 intervention \u00b7 settled in 11 m \u00b7 signal 0.79', open: go('detail'),
+          segs: mkSegs([[0,4,'break'],[4,18,'deep_work'],[18,26,'zoned_out'],[26,30,'break'],[30,42,'deep_work'],[42,48,'zoned_out']]) },
+        { title: 'Grant application', date: 'Mon \u00b7 16:05', dur: '1:34', deep: '52% deep', meta: '3 interventions \u00b7 settled in 14 m \u00b7 signal 0.71', open: go('detail'),
+          segs: mkSegs([[0,9,'break'],[9,28,'deep_work'],[28,36,'spiraling'],[36,41,'break'],[41,60,'deep_work'],[60,66,'no_signal'],[66,78,'zoned_out'],[78,94,'deep_work']]) },
+        { title: 'Lab notes', date: 'Sun \u00b7 11:20', dur: '0:36', deep: '\u2013', meta: '61% of this session was below threshold \u00b7 narrative withheld', open: go('detail'),
+          segs: mkSegs([[0,6,'deep_work'],[6,20,'no_signal'],[20,24,'zoned_out'],[24,36,'no_signal']]) }
+      ],
+
+      ribbon, catRibbon,
+      detailStats: [
+        { label: 'Deep work', value: '44 m', color: 'var(--deep-ink)' },
+        { label: 'Duration', value: '72 m', color: 'var(--ink)' },
+        { label: 'Settled in', value: '7 m', color: 'var(--ink)' },
+        { label: 'Mean signal', value: '0.88', color: 'var(--ink)' }
+      ],
+      takeaways: [
+        { text: 'Your longest unbroken stretch was 30 minutes \u2014 your best this week.', rule: '2px solid var(--deep)' },
+        { text: 'Both losses of focus followed an app switch into communication within 40 seconds.', rule: '1px solid var(--line)' },
+        { text: 'The break at 14:54 worked: your pulse came back below where it started.', rule: '1px solid var(--line)' }
+      ],
+      legend: [
+        { label: 'deep_work', chip: 'width: 14px; height: 8px; border-radius: 2px; display: inline-block; background: var(--deep);' },
+        { label: 'zoned_out', chip: 'width: 14px; height: 8px; border-radius: 2px; display: inline-block; background: repeating-linear-gradient(0deg, oklch(1 0 0 / 0.5) 0 1px, transparent 1px 4px), var(--zoned);' },
+        { label: 'spiraling', chip: 'width: 14px; height: 8px; border-radius: 2px; display: inline-block; background: repeating-linear-gradient(45deg, oklch(1 0 0 / 0.45) 0 1.5px, transparent 1.5px 5px), var(--spiral);' },
+        { label: 'break', chip: 'width: 14px; height: 8px; border-radius: 2px; display: inline-block; background: radial-gradient(oklch(1 0 0 / 0.55) 1px, transparent 1.2px) 0 0 / 6px 6px, var(--break);' },
+        { label: 'warmup', chip: 'width: 14px; height: 8px; border-radius: 2px; display: inline-block; background: repeating-linear-gradient(90deg, oklch(1 0 0 / 0.55) 0 1px, transparent 1px 5px), var(--deep-mid);' },
+        { label: 'no_signal', chip: 'width: 14px; height: 8px; border-radius: 2px; display: inline-block; background: repeating-linear-gradient(45deg, oklch(0.90 0.012 268) 0 4px, oklch(0.962 0.006 268) 4px 8px);' }
+      ],
+      markers: Component.ALERTS.map(a => ({
+        label: a.kind, style: 'position: absolute; bottom: 0; left: ' + (a.min / 72 * 100) + '%; transform: translateX(-50%); font-family: var(--mono); font-size: 10px; color: ' + (a.kind === 'spiral' ? 'var(--spiral-ink)' : 'var(--zoned-ink)') + '; white-space: nowrap;'
+      })),
+      stems: Component.ALERTS.map(a => ({
+        style: 'position: absolute; top: 0; bottom: 0; left: ' + (a.min / 72 * 100) + '%; width: 1px; background: ' + (a.kind === 'spiral' ? 'var(--spiral-mid)' : 'var(--zoned-mid)') + ';'
+      })),
+      probes: [
+        { time: '14:26', said: 'Focused', pred: 'deep_work', verdict: 'agreed', color: 'var(--mute)' },
+        { time: '14:41', said: 'Drifting', pred: 'zoned_out', verdict: 'agreed', color: 'var(--mute)' },
+        { time: '15:02', said: 'Focused', pred: 'zoned_out', verdict: 'false alarm', color: 'var(--spiral-ink)' },
+        { time: '15:18', said: 'Drifting', pred: 'spiraling', verdict: 'agreed', color: 'var(--mute)' }
+      ],
+      interventions: [
+        { name: 'zone_out', color: 'var(--zoned)', ink: 'var(--zoned-ink)', meta: '14:49 \u00b7 you took the 2-min reset',
+          result: 'Pulse lifted back toward baseline within 90 seconds and you stayed on the page for the next ten minutes.',
+          measures: [{ label: 'HR', value: '54 \u2192 62' }, { label: 'blink /min', value: '4 \u2192 13' }] },
+        { name: 'spiral', color: 'var(--spiral)', ink: 'var(--spiral-ink)', meta: '15:11 \u00b7 voice-guided, completed',
+          result: 'Extended exhale brought breathing down from nineteen a minute to fourteen. You went back to writing without a break.',
+          measures: [{ label: 'I:E', value: '1 : 1.1 \u2192 1 : 2.1' }, { label: 'breathing', value: '19.0 \u2192 14.2' }] }
+      ],
+
+      bars: [
+        { label: 'Study', value: '128 m', fill: 'display: block; height: 100%; width: 76%; border-radius: var(--r-pill); background: var(--cat-1);' },
+        { label: 'Productivity', value: '74 m', fill: 'display: block; height: 100%; width: 44%; border-radius: var(--r-pill); background: var(--cat-2);' },
+        { label: 'Communication', value: '41 m', fill: 'display: block; height: 100%; width: 24%; border-radius: var(--r-pill); background: var(--cat-3);' },
+        { label: 'Social', value: '22 m', fill: 'display: block; height: 100%; width: 13%; border-radius: var(--r-pill); background: var(--cat-4);' },
+        { label: 'Entertainment', value: '9 m', fill: 'display: block; height: 100%; width: 6%; border-radius: var(--r-pill); background: var(--cat-4);' }
+      ],
+      breaks: [
+        { label: 'Restorative', value: '6 of 9', color: 'var(--break)' },
+        { label: 'Depleting', value: '3 of 9', color: 'var(--zoned)' }
+      ],
+      efficacy: [
+        { label: 'I:E ratio', value: '1 : 1.2 \u2192 1 : 2.0' },
+        { label: 'breathing /min', value: '18.4 \u2192 13.9' },
+        { label: 'returned to deep work', value: '7 of 9' }
+      ],
+
+      matrixRows: [
+        { label: 'deep_work', cells: [
+          { value: 41, style: 'display: flex; align-items: center; justify-content: center; height: 84px; border-radius: var(--r-sm); font-size: 23px; font-weight: 500; font-variant-numeric: tabular-nums; background: oklch(0.56 0.185 258 / 0.85); color: oklch(1 0 0);' },
+          { value: 6, style: 'display: flex; align-items: center; justify-content: center; height: 84px; border-radius: var(--r-sm); font-size: 23px; font-weight: 500; font-variant-numeric: tabular-nums; background: var(--sink); color: var(--body);' }
+        ] },
+        { label: 'zoned_out', cells: [
+          { value: 9, style: 'display: flex; align-items: center; justify-content: center; height: 84px; border-radius: var(--r-sm); font-size: 23px; font-weight: 500; font-variant-numeric: tabular-nums; background: var(--sink); color: var(--body);' },
+          { value: 28, style: 'display: flex; align-items: center; justify-content: center; height: 84px; border-radius: var(--r-sm); font-size: 23px; font-weight: 500; font-variant-numeric: tabular-nums; background: oklch(0.56 0.185 258 / 0.58); color: oklch(1 0 0);' }
+        ] }
+      ],
+      validStats: [
+        { label: 'Check-ins', value: 'n = 84', note: 'across 14 sessions' },
+        { label: 'Agreement', value: '82%', note: '69 of 84 matched' },
+        { label: 'False alarms', value: '12.8%', note: 'called drifting, you were fine' }
+      ],
+      limits: [
+        'Flow performs camera-based physiological sensing. It is not a medical device, it diagnoses nothing, and it has no clearance of any kind.',
+        'Self-report is the only ground truth here, and self-report is imperfect \u2014 you may not notice you had drifted until you are asked.',
+        'Signal quality drives everything. Below 0.55 confidence Flow keeps reading but stops interrupting, and those windows are excluded from this table.',
+        'A single user, a single machine, 84 check-ins. This is evidence that the classifier tracks something real for you \u2014 not a population result.'
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

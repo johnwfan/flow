@@ -36,6 +36,7 @@ export interface AppDistraction {
   category: string | null;
   minutes: number;
   episodes: number;
+  refocusMinutesAvg: number | null;
 }
 
 export interface DistractionWindow {

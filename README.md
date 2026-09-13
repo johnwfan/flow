@@ -50,7 +50,7 @@ Run `pnpm check:env` any time to confirm what's actually set, without printing v
 
 ```bash
 pnpm dev:all      # starts api (:3001) + web (:3000)
-run.bat           # separately: the real-webcam agent (Windows; opens the live session page for you)
+run.bat           # separately: starts the real-webcam agent, preflights it, then opens the live page
 ```
 
 `pnpm dev:all` deliberately does **not** start the agent — it binds a real camera via a native SDK and has to run on whichever machine has the webcam, not wherever the API happens to be. See `docs/RUNNING.md` for the full dev/demo runbook and `pnpm smoke` for a pre-demo sanity check.

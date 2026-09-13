@@ -30,7 +30,7 @@ export function DistractionInsights({ insights }: { insights: SessionInsights })
                 key={i}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(80px, 140px) minmax(0, 1fr) 84px",
+                  gridTemplateColumns: "minmax(80px, 140px) minmax(0, 1fr) minmax(112px, max-content)",
                   gap: "var(--s3)",
                   alignItems: "center",
                   padding: "9px 0",
@@ -68,6 +68,7 @@ export function DistractionInsights({ insights }: { insights: SessionInsights })
                 </span>
                 <span style={{ textAlign: "right", fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>
                   {formatMinutesLabel(a.minutes * 60)} · {a.episodes} ep
+                  {a.refocusMinutesAvg !== null ? ` · ${formatMinutesLabel(a.refocusMinutesAvg * 60)} re-entry` : ""}
                 </span>
               </div>
             );

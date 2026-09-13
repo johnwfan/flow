@@ -4,6 +4,7 @@ import type { WsMessage, SessionControlMessage } from "@flow/shared";
 export interface WsServerOptions {
   port: number;
   onSessionControl?: (msg: SessionControlMessage) => void;
+  onServerError?: (err: NodeJS.ErrnoException) => void;
 }
 
 export class AgentWsServer {
@@ -43,6 +44,11 @@ export class AgentWsServer {
 
     this.wss.on("listening", () => {
       console.log(`[ws] server listening on ws://localhost:${opts.port}`);
+    });
+
+    this.wss.on("error", (err: NodeJS.ErrnoException) => {
+      console.error(`[ws] server error: ${err.message}`);
+      opts.onServerError?.(err);
     });
   }
 

@@ -19,6 +19,7 @@ export interface AppDistraction {
   category: string | null;
   minutes: number;
   episodes: number;
+  refocusMinutesAvg: number | null;
 }
 
 export interface SessionInsights {
@@ -56,6 +57,10 @@ function appAt(timeline: AppContextRow[], ts: number): AppContextRow | undefined
   return result;
 }
 
+function nextFocusedAfter(ribbon: StateRibbonSegment[], ts: number): StateRibbonSegment | undefined {
+  return ribbon.find((segment) => segment.state === State.Focused && new Date(segment.startedAt).getTime() >= ts);
+}
+
 /**
  * Real, deterministic numbers -- no LLM involved. Ribbon segments come from
  * the 1-min continuous aggregate (see rollups.ts), so episode boundaries
@@ -85,18 +90,42 @@ export async function computeDistractionStats(
     };
   });
 
-  const byApp = new Map<string, AppDistraction>();
+  const byApp = new Map<string, AppDistraction & { refocusTotal: number; refocusCount: number }>();
   for (const w of distractionWindows) {
     const key = `${w.appTitle ?? "unknown"}::${w.category ?? "unknown"}`;
+    const focusedAfter = nextFocusedAfter(ribbon, new Date(w.endedAt).getTime());
+    const refocusMinutes = focusedAfter
+      ? Math.max(0, (new Date(focusedAfter.startedAt).getTime() - new Date(w.endedAt).getTime()) / 60_000)
+      : null;
     const existing = byApp.get(key);
     if (existing) {
       existing.minutes += w.durationS / 60;
       existing.episodes += 1;
+      if (refocusMinutes !== null) {
+        existing.refocusTotal += refocusMinutes;
+        existing.refocusCount += 1;
+      }
     } else {
-      byApp.set(key, { appTitle: w.appTitle, category: w.category, minutes: w.durationS / 60, episodes: 1 });
+      byApp.set(key, {
+        appTitle: w.appTitle,
+        category: w.category,
+        minutes: w.durationS / 60,
+        episodes: 1,
+        refocusMinutesAvg: null,
+        refocusTotal: refocusMinutes ?? 0,
+        refocusCount: refocusMinutes === null ? 0 : 1,
+      });
     }
   }
-  const distractingApps = [...byApp.values()].sort((a, b) => b.minutes - a.minutes);
+  const distractingApps = [...byApp.values()]
+    .map(({ refocusTotal, refocusCount, ...app }) => ({
+      ...app,
+      refocusMinutesAvg: refocusCount === 0 ? null : Math.round((refocusTotal / refocusCount) * 10) / 10,
+    }))
+    .sort((a, b) => {
+      const refocusDelta = (b.refocusMinutesAvg ?? -1) - (a.refocusMinutesAvg ?? -1);
+      return Math.abs(refocusDelta) >= 1 ? refocusDelta : b.minutes - a.minutes;
+    });
 
   return {
     distractionPct: Math.round(distractionPct * 10) / 10,
@@ -207,7 +236,10 @@ function buildTipsPrompt(
 ): string {
   const appsText = stats.distractingApps
     .slice(0, 3)
-    .map((a) => `${a.appTitle ?? a.category ?? "unknown app"} (${Math.round(a.minutes)}min across ${a.episodes} episode(s))`)
+    .map((a) => {
+      const refocus = a.refocusMinutesAvg !== null ? `, avg ${Math.round(a.refocusMinutesAvg)}min to refocus` : "";
+      return `${a.appTitle ?? a.category ?? "unknown app"} (${Math.round(a.minutes)}min across ${a.episodes} episode(s)${refocus})`;
+    })
     .join(", ");
 
   return [

@@ -26,9 +26,16 @@ export async function computeFocusWindow(pool: Pool, deviceId?: string): Promise
       [session.id],
     );
 
+    let firstFocusedMinute: number | null = null;
     let dropoffMinute: number | null = null;
     for (const row of buckets.rows) {
-      const minute = Math.floor(row.minute);
+      const sessionMinute = Math.floor(row.minute);
+      if (firstFocusedMinute === null) {
+        if (row.state !== State.Focused) continue;
+        firstFocusedMinute = sessionMinute;
+      }
+
+      const minute = sessionMinute - firstFocusedMinute;
       const entry = minuteBuckets.get(minute) ?? { total: 0, stillFocused: 0 };
       entry.total += 1;
       if (row.state === State.Focused) entry.stillFocused += 1;
@@ -142,17 +149,18 @@ export async function computeBreakQuality(pool: Pool, deviceId?: string): Promis
 
   let restorative = 0;
   let depleting = 0;
-  let pendingResume: { sessionId: string; ts: Date } | null = null;
+  const pendingPauseBySession = new Map<string, Date>();
 
   for (const row of controlEvents.rows) {
-    if (row.payload.action === "resume") {
-      pendingResume = { sessionId: row.session_id, ts: row.ts };
+    if (row.payload.action === "pause") {
+      pendingPauseBySession.set(row.session_id, row.ts);
       continue;
     }
-    if (row.payload.action !== "pause" || !pendingResume) continue;
+    if (row.payload.action !== "resume" || !pendingPauseBySession.has(row.session_id)) continue;
 
-    const { sessionId, ts } = pendingResume;
-    pendingResume = null;
+    const sessionId = row.session_id;
+    const ts = row.ts;
+    pendingPauseBySession.delete(sessionId);
 
     const focusedAfter = await pool.query<{ bucket: Date }>(
       `SELECT bucket FROM samples_1min

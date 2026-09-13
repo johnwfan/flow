@@ -574,7 +574,30 @@ export default function SessionPage() {
   const previewStateRef = useRef<PreviewKey | null>(null);
   previewStateRef.current = previewState;
   const [previewAlertOn, setPreviewAlertOn] = useState(false);
+  const [demoControlsOpen, setDemoControlsOpen] = useState(false);
+  const [demoUiHidden, setDemoUiHidden] = useState(false);
   const demoRef = useRef({ hr: 61, hrv: 78, br: 12.8, blink: 15 });
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      if (isTyping || e.altKey || e.ctrlKey || e.metaKey || e.key.toLowerCase() !== "h") return;
+
+      e.preventDefault();
+      setPreviewState(null);
+      setPreviewAlertOn(false);
+      setDemoControlsOpen(false);
+      setDemoUiHidden((hidden) => !hidden);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -954,6 +977,9 @@ export default function SessionPage() {
     alert ?? (previewAlertOn ? { ...DEMO_ALERT[state?.state === "spiraling" ? "spiral" : "zone_out"], ts: Date.now() } : null);
   const alertMood = effectiveAlert?.type === "spiral" ? "spiral" : "zone_out";
   const alertCopy = ALERT_COPY[alertMood];
+  const disconnected = !connected && !isPreviewing;
+  const cameraBlocked = cameraRefused && !isPreviewing;
+  const showDemoControls = !demoUiHidden && demoControlsOpen;
 
   function dismissAlert() {
     setAlert(null);
@@ -995,37 +1021,6 @@ export default function SessionPage() {
     }
   }
 
-  if (!connected && !isPreviewing) {
-    return (
-      <div className={styles.theme}>
-        <div className={styles.edgeState}>
-          <div className={styles.edgeDot} />
-          <p style={{ fontSize: 18, marginBottom: 8 }}>Flow isn&apos;t listening yet.</p>
-          <p style={{ fontSize: 13.5, color: "var(--body)", marginBottom: 16 }}>
-            Start the local agent, then this page will connect on its own.
-          </p>
-          <span className={styles.chip}>run.bat</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (cameraRefused && !isPreviewing) {
-    return (
-      <div className={styles.theme}>
-        <div className={styles.edgeState} style={{ background: "var(--none-hatch)" }}>
-          <p style={{ fontSize: 18, marginBottom: 8 }}>No camera, no reading.</p>
-          <p style={{ fontSize: 13.5, color: "var(--body)", marginBottom: 16, maxWidth: "44ch", marginLeft: "auto", marginRight: "auto" }}>
-            Flow can&apos;t infer anything without the frames, and won&apos;t pretend otherwise. ({cameraRefused})
-          </p>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => window.location.reload()}>
-            Reload the page
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={styles.theme}>
       <div className={styles.header}>
@@ -1034,62 +1029,77 @@ export default function SessionPage() {
           <span className={styles.title}>{isRunning ? "Active session" : isPreviewing ? "Session preview" : "Session"}</span>
           {isRunning && <span className={`${styles.elapsed} ${styles.num}`}>{formatElapsed(elapsedS)}</span>}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <div className={styles.previewGroup}>
-            <span id="preview-state-label" className={styles.previewLabel}>
-              Preview state
-            </span>
-            <div role="radiogroup" aria-labelledby="preview-state-label" className={styles.previewSeg}>
+        <div className={styles.headerActions}>
+          {!demoUiHidden && (
+            <div className={styles.demoWrap}>
               <button
-                ref={(el) => {
-                  previewBtnRefs.current[0] = el;
-                }}
-                role="radio"
-                aria-checked={!isPreviewing}
-                tabIndex={!isPreviewing ? 0 : -1}
-                className={`${styles.previewChip} ${!isPreviewing ? styles.previewChipActive : ""}`}
-                onClick={() => setPreviewState(null)}
-                onKeyDown={(e) => onPreviewKeyDown(e, 0)}
+                className={`${styles.btn} ${styles.btnSecondary} ${styles.demoToggle}`}
+                aria-expanded={showDemoControls}
+                aria-controls="session-demo-controls"
+                onClick={() => setDemoControlsOpen((open) => !open)}
               >
-                live
+                Try demo
               </button>
-              {PREVIEW_OPTIONS.map((o, i) => (
-                <button
-                  key={o.key}
-                  ref={(el) => {
-                    previewBtnRefs.current[i + 1] = el;
-                  }}
-                  role="radio"
-                  aria-checked={previewState === o.key}
-                  tabIndex={previewState === o.key ? 0 : -1}
-                  className={`${styles.previewChip} ${previewState === o.key ? styles.previewChipActive : ""}`}
-                  onClick={() => setPreviewState(o.key)}
-                  onKeyDown={(e) => onPreviewKeyDown(e, i + 1)}
-                >
-                  {o.label}
-                </button>
-              ))}
+              {showDemoControls && (
+                <div id="session-demo-controls" className={styles.demoPanel}>
+                  <div className={styles.previewGroup}>
+                    <span id="preview-state-label" className={styles.previewLabel}>
+                      Preview state
+                    </span>
+                    <div role="radiogroup" aria-labelledby="preview-state-label" className={styles.previewSeg}>
+                      <button
+                        ref={(el) => {
+                          previewBtnRefs.current[0] = el;
+                        }}
+                        role="radio"
+                        aria-checked={!isPreviewing}
+                        tabIndex={!isPreviewing ? 0 : -1}
+                        className={`${styles.previewChip} ${!isPreviewing ? styles.previewChipActive : ""}`}
+                        onClick={() => setPreviewState(null)}
+                        onKeyDown={(e) => onPreviewKeyDown(e, 0)}
+                      >
+                        live
+                      </button>
+                      {PREVIEW_OPTIONS.map((o, i) => (
+                        <button
+                          key={o.key}
+                          ref={(el) => {
+                            previewBtnRefs.current[i + 1] = el;
+                          }}
+                          role="radio"
+                          aria-checked={previewState === o.key}
+                          tabIndex={previewState === o.key ? 0 : -1}
+                          className={`${styles.previewChip} ${previewState === o.key ? styles.previewChipActive : ""}`}
+                          onClick={() => setPreviewState(o.key)}
+                          onKeyDown={(e) => onPreviewKeyDown(e, i + 1)}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    className={`${styles.btn} ${styles.btnQuiet} ${styles.previewInterventionBtn}`}
+                    onClick={() =>
+                      setPreviewAlertOn((v) => {
+                        const next = !v;
+                        // Preview never routes through the real WsMessage "alert" handler
+                        // (that's the only place playChime() is normally called), so fire
+                        // it here directly -- otherwise "Preview intervention" shows the
+                        // card silently, which looks exactly like a broken chime.
+                        if (next) playChime(state?.state === "spiraling" ? "spiral" : "zone_out");
+                        return next;
+                      })
+                    }
+                  >
+                    {previewAlertOn ? "Hide intervention" : "Preview intervention"}
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-          <button
-            className={`${styles.btn} ${styles.btnQuiet}`}
-            style={{ fontSize: 11.5, padding: "6px 13px" }}
-            onClick={() =>
-              setPreviewAlertOn((v) => {
-                const next = !v;
-                // Preview never routes through the real WsMessage "alert" handler
-                // (that's the only place playChime() is normally called), so fire
-                // it here directly -- otherwise "Preview intervention" shows the
-                // card silently, which looks exactly like a broken chime.
-                if (next) playChime(state?.state === "spiraling" ? "spiral" : "zone_out");
-                return next;
-              })
-            }
-          >
-            {previewAlertOn ? "Hide intervention" : "Preview intervention"}
-          </button>
+          )}
           {!isRunning && (
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => send("start")}>
+            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => send("start")} disabled={!connected}>
               Start session
             </button>
           )}
@@ -1117,7 +1127,26 @@ export default function SessionPage() {
         </div>
       )}
 
-      {!panelVisible ? (
+      {cameraBlocked ? (
+        <div className={styles.edgeState} style={{ background: "var(--none-hatch)" }}>
+          <p style={{ fontSize: 18, marginBottom: 8 }}>No camera, no reading.</p>
+          <p style={{ fontSize: 13.5, color: "var(--body)", marginBottom: 16, maxWidth: "44ch", marginLeft: "auto", marginRight: "auto" }}>
+            Flow can&apos;t infer anything without the frames, and won&apos;t pretend otherwise. ({cameraRefused})
+          </p>
+          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => window.location.reload()}>
+            Reload the page
+          </button>
+        </div>
+      ) : disconnected ? (
+        <div className={styles.edgeState}>
+          <div className={styles.edgeDot} />
+          <p style={{ fontSize: 18, marginBottom: 8 }}>Flow isn&apos;t listening yet.</p>
+          <p style={{ fontSize: 13.5, color: "var(--body)", marginBottom: 16 }}>
+            Start the local agent, then this page will connect on its own.
+          </p>
+          <span className={styles.chip}>run.bat</span>
+        </div>
+      ) : !panelVisible ? (
         <div className={styles.edgeState}>
           <p style={{ fontSize: 18 }}>Ready when you are.</p>
           <p style={{ fontSize: 13.5, color: "var(--body)", marginTop: 8, maxWidth: "48ch", margin: "8px auto" }}>

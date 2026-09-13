@@ -52,30 +52,31 @@ missing and what to do about each one.
    | Web | http://localhost:3000 |
    | API | http://localhost:3001 (health: `/v1/health`) |
 
-2. In a separate terminal/window, start the agent against a real webcam —
-   unchanged from the existing launch mechanism:
+2. In a separate terminal/window, start the agent against a real webcam:
 
    ```
    run.bat
    ```
 
-   This runs `npx tsx apps/agent/src/index.ts --real`. It no longer needs a
-   hardcoded `--camera <n>`: SmartSpectra's device index doesn't reliably
-   match Windows' own device order, and whichever webcam a fixed index
-   pointed at may not be the one currently plugged in, so the agent probes
-   indices 0-3 itself and retries after a failed open (see the camera
-   auto-probe in `src/index.ts`) before giving up and falling back to mock.
-   Pass `--camera <n>` explicitly to pin one index instead (e.g. if a
-   built-in laptop camera keeps winning the race over an external one you
-   want). List what Windows currently sees with `Get-PnpDevice -Class
-   Camera | Select-Object Status, FriendlyName` in PowerShell — a `Status`
-   other than `OK` means that device isn't actually connected right now.
-   Requires `apps/agent/.env` with `SMARTSPECTRA_API_KEY` set. If the
-   camera fails, `run-demo.bat` replays a pre-recorded session instead
-   (`--demo`).
+   This starts one `tsx src/index.ts --real` agent window, then runs
+   `pnpm --filter @flow/agent preflight` before opening the page. The
+   preflight checks `SMARTSPECTRA_API_KEY`, confirms Windows reports the
+   preferred camera name (`FLOW_SENSING_CAMERA_NAME`, default `HD Webcam`)
+   as `OK`, connects to the local WebSocket, starts a short preflight
+   session, and waits for real decoded samples. If any of those fail, the
+   public session page is not opened.
 
-3. `run.bat` auto-opens `https://tryflow.study/session` (the deployed
-   site). If you're testing local web/UI changes instead, open
+   SmartSpectra's device index doesn't reliably match Windows' device order,
+   so the agent probes candidate indices, requires sustained validation plus
+   real samples before accepting one, then remembers the last-good index for
+   the named camera. Pass `--camera <n>` to try one index first. List what
+   Windows currently sees with `Get-PnpDevice -Class Camera | Select-Object
+   Status, FriendlyName` in PowerShell — a `Status` other than `OK` means
+   that device isn't actually connected right now.
+
+3. After the preflight passes, `run.bat` auto-opens
+   `https://tryflow.study/session` (the deployed site). If you're testing
+   local web/UI changes instead, open
    http://localhost:3000/session and http://localhost:3000/dashboard by
    hand — the browser tab `run.bat` opens won't point at localhost.
 
@@ -90,10 +91,9 @@ changes that.
 
 - **Web/API already deployed (e.g. to `tryflow.study`, autodeployed on
   Vultr):** you don't need `pnpm dev:all` at all — just run the agent.
-  `run.bat` / `run-demo.bat` now open `https://tryflow.study/session` in
-  your default browser and then start the agent, in that order, so
-  double-clicking one file is the whole launch: no separate "start api/web,
-  then remember the URL" step. The `/session` page connects straight to the
+  `run.bat` starts the agent, proves the real camera path with preflight,
+  then opens `https://tryflow.study/session` in your default browser.
+  `run-demo.bat` still opens the replay path separately. The `/session` page connects straight to the
   agent's local WebSocket (`ws://localhost:8765` by default — see
   `NEXT_PUBLIC_AGENT_WS_URL` in `.env.example`), not through the API, so
   this works over `localhost` even though the page itself is served from
@@ -124,6 +124,19 @@ changes that.
   See `apps/api/scripts/seed-demo.ts`. Requires api already running and
   reachable at `API_BASE_URL` (default `http://localhost:3001`).
 
+- **Filling the Sessions and Patterns pages with past demo history:** seed a
+  repeatable set of believable prior sessions directly into the DB:
+
+  ```
+  pnpm --filter @flow/api seed:history
+  ```
+
+  See `apps/api/scripts/seed-history.ts`. By default it replaces sessions for
+  `DEMO_DEVICE_ID` (default `demo-device`) with 24 past sessions. Set
+  `DEMO_HISTORY_SESSIONS=40` to create more, or `DEMO_HISTORY_APPEND=1` to
+  append instead of replacing. Set `DEMO_HISTORY_DRY_RUN=1` to verify the
+  generated shape without touching the DB.
+
 ## Smoke test — verify wiring before a live demo
 
 A fully automated end-to-end test isn't possible here — the sensing path
@@ -140,8 +153,8 @@ aggregate round trip via `seed-demo.ts`. Requires `pnpm dev:all` already
 running in another terminal. Prints a manual checklist afterward for the
 camera-dependent leg:
 
-- [ ] Start the agent against a real webcam (`run.bat`)
-- [ ] Open `/session` and confirm the waveform renders within ~20s and the
+- [ ] Start the agent against a real webcam (`run.bat`) and let preflight pass
+- [ ] Confirm `/session` opens and the waveform renders within ~20s and the
       state badge leaves "warmup"
 - [ ] Let a zone-out alert fire (or use `run-demo.bat` to replay a fixed
       script instead of waiting)
