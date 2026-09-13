@@ -23,6 +23,7 @@ export function RegenerateInsightsButton() {
       router.refresh();
     } catch {
       window.alert("Could not regenerate the Gemini insights board. Check that the API and Gemini key are working.");
+    } finally {
       setIsRegenerating(false);
     }
   }

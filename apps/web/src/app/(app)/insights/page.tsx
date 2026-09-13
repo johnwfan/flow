@@ -119,25 +119,33 @@ export default async function InsightsPage() {
         </div>
         <div className={styles.digestList}>
           {digestItems.map((takeaway, index) => (
-            <a key={`${takeaway.id}-${index}`} href={`#${takeaway.id}`} className={styles.digestItem}>
-              <span className={styles.digestIndex}>{String(index + 1).padStart(2, "0")}</span>
-              <span>
-                <span className={styles.digestLabel}>{takeaway.label}</span>
-                <span className={styles.digestText}>{takeaway.text}</span>
-                {takeaway.evidence.length > 0 && (
-                  <span className={styles.digestEvidence}>{takeaway.evidence.join(" · ")}</span>
-                )}
-                {takeaway.recommendation && (
-                  <span className={styles.digestAction}>{takeaway.recommendation}</span>
-                )}
-                {takeaway.confidence && (
-                  <span className={styles.digestConfidence}>confidence: {takeaway.confidence}</span>
-                )}
-              </span>
-              <span className={styles.digestArrow} aria-hidden="true">
-                ↘
-              </span>
-            </a>
+            <div key={`${takeaway.id}-${index}`} className={styles.digestRow}>
+              <a href={`#${takeaway.id}`} className={styles.digestItem}>
+                <span className={styles.digestIndex}>{String(index + 1).padStart(2, "0")}</span>
+                <span>
+                  <span className={styles.digestLabel}>{takeaway.label}</span>
+                  <span className={styles.digestText}>{takeaway.text}</span>
+                  {takeaway.evidence.length > 0 && (
+                    <span className={styles.digestEvidence}>{takeaway.evidence.join(" · ")}</span>
+                  )}
+                  {takeaway.confidence && (
+                    <span className={styles.digestConfidence}>confidence: {takeaway.confidence}</span>
+                  )}
+                </span>
+                <span className={styles.digestArrow} aria-hidden="true">
+                  ↘
+                </span>
+              </a>
+              {takeaway.recommendation && (
+                <details className={styles.digestReveal}>
+                  <summary>
+                    What to do
+                    <span className={styles.digestRevealIcon} aria-hidden="true" />
+                  </summary>
+                  <p className={styles.digestAction}>{takeaway.recommendation}</p>
+                </details>
+              )}
+            </div>
           ))}
         </div>
       </section>
