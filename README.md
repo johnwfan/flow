@@ -40,7 +40,7 @@ Copy `.env.example` to `.env` at the repo root and fill in:
 | `GEMINI_API_KEY` | api | No — narratives/tips fall back to canned text without it |
 | `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` | api | No — `/v1/speak` degrades gracefully without it |
 | `NEXT_PUBLIC_API_BASE_URL` | web | No — defaults to same-origin in production, `localhost:3001` in dev |
-| `FLOW_HISTORY_DEVICE_ID` | web | No — defaults to `demo-device`; set `all` to show every stored device |
+| `FLOW_HISTORY_DEVICE_ID` | web | No — defaults to all completed sessions; set `demo-device` for a seed-only demo view |
 | `NEXT_PUBLIC_AGENT_WS_URL` | web | No — defaults to `ws://localhost:8765` |
 
 The **agent** reads its own env file at `apps/agent/.env` (not the root one) — see `apps/agent/.env.example`. Its key setting is `API_BASE_URL`: point it at `http://localhost:3001` for local dev, or `https://tryflow.study` to have a locally-run agent (camera sensing only ever runs locally — see below) persist straight to the live public dashboard.

@@ -42,7 +42,7 @@ export class ApiClient {
   private pending: PendingBatch[] = [];
   private backoffMs = BACKOFF_START_MS;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
-  private sending = false;
+  private drainPromise: Promise<void> | null = null;
 
   constructor(opts: { baseUrl: string; deviceId: string; spillDir: string }) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, "");
@@ -101,18 +101,22 @@ export class ApiClient {
   queueBatch(
     sessionId: string,
     payload: Omit<BatchPayload, "batchKey">
-  ): void {
+  ): Promise<void> {
     const batchKey = randomUUID();
     this.pending.push({ sessionId, batchKey, payload: { ...payload, batchKey } });
     this.saveSpill();
-    this.trySendAll();
+    return this.trySendAll();
   }
 
-  /** POST /v1/sessions/:id/end. Flushes any still-pending batches first (best-effort, doesn't block on them). */
+  /** POST /v1/sessions/:id/end after any queued batches have had a chance to drain. */
   async endSession(sessionId: string): Promise<void> {
-    this.trySendAll();
+    await this.trySendAll();
     try {
-      const res = await fetch(`${this.baseUrl}/v1/sessions/${sessionId}/end`, { method: "POST" });
+      const res = await fetch(`${this.baseUrl}/v1/sessions/${sessionId}/end`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       console.log(`[api] session ended: ${sessionId}`);
     } catch (err: any) {
@@ -120,10 +124,12 @@ export class ApiClient {
     }
   }
 
-  private trySendAll(): void {
-    if (this.sending) return;
-    this.sending = true;
-    void this.drainQueue();
+  private trySendAll(): Promise<void> {
+    if (this.drainPromise) return this.drainPromise;
+    this.drainPromise = this.drainQueue().finally(() => {
+      this.drainPromise = null;
+    });
+    return this.drainPromise;
   }
 
   private async drainQueue(): Promise<void> {
@@ -147,13 +153,11 @@ export class ApiClient {
         console.warn(
           `[api] batch upload failed (${this.pending.length} pending) — retrying in ${Math.round(this.backoffMs / 1000)}s: ${err.message}`
         );
-        this.sending = false;
         if (this.retryTimer) clearTimeout(this.retryTimer);
         this.retryTimer = setTimeout(() => this.trySendAll(), this.backoffMs);
         this.backoffMs = Math.min(this.backoffMs * 2, BACKOFF_MAX_MS);
         return;
       }
     }
-    this.sending = false;
   }
 }

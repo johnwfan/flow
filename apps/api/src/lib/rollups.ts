@@ -101,11 +101,16 @@ export async function getSessionSummary(pool: Pool, sessionId: string): Promise<
 }
 
 export async function listSessionSummaries(pool: Pool, deviceId?: string): Promise<SessionSummary[]> {
+  const clauses = ["ended_at IS NOT NULL"];
+  const params: string[] = [];
+  if (deviceId) {
+    params.push(deviceId);
+    clauses.push("device_id = $1");
+  }
+
   const sessionResult = await pool.query<{ id: string }>(
-    deviceId
-      ? "SELECT id FROM sessions WHERE device_id = $1 ORDER BY started_at DESC"
-      : "SELECT id FROM sessions ORDER BY started_at DESC",
-    deviceId ? [deviceId] : [],
+    `SELECT id FROM sessions WHERE ${clauses.join(" AND ")} ORDER BY started_at DESC`,
+    params,
   );
 
   const summaries: SessionSummary[] = [];

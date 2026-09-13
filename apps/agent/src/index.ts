@@ -89,6 +89,8 @@ const apiClient = new ApiClient({
   spillDir: join(scriptDir, "..", "spill"),
 });
 let currentSessionId: string | null = null;
+let currentSessionStart: Promise<string | null> | null = null;
+let closingPersistedSession = false;
 const uploadScheduler = new UploadScheduler(
   apiClient,
   () => currentSessionId,
@@ -100,6 +102,41 @@ const uploadScheduler = new UploadScheduler(
 function broadcastAndRecord(msg: WsMessage): void {
   server.broadcast(msg);
   uploadScheduler.record(msg);
+}
+
+function startPersistedSession(): void {
+  closingPersistedSession = false;
+  const start = apiClient.startSession();
+  currentSessionStart = start;
+
+  void start.then((id) => {
+    if (currentSessionStart !== start) return;
+    currentSessionStart = null;
+    currentSessionId = id;
+    if (id && !closingPersistedSession) uploadScheduler.start();
+  });
+}
+
+async function endPersistedSession(): Promise<void> {
+  closingPersistedSession = true;
+  uploadScheduler.stop();
+
+  const pendingStart = currentSessionStart;
+  const startedId = pendingStart ? await pendingStart : currentSessionId;
+  if (currentSessionStart === pendingStart) currentSessionStart = null;
+
+  const idToClose = currentSessionId ?? startedId;
+  if (!idToClose) {
+    await uploadScheduler.flush();
+    closingPersistedSession = false;
+    return;
+  }
+
+  currentSessionId = idToClose;
+  await uploadScheduler.flush();
+  currentSessionId = null;
+  await apiClient.endSession(idToClose);
+  closingPersistedSession = false;
 }
 
 // ── Pipeline (classifier, baseline, window tracker, probes) ───────
@@ -143,26 +180,17 @@ const server = new AgentWsServer({
       pipeline.startTracking();
       startEmitting({ freshSession: wasIdle });
       if (wasIdle && !isPreflight) {
-        // Register the session with the API in the background — don't
-        // block sensing/broadcast on it. If it fails, currentSessionId
-        // stays null and UploadScheduler drops accumulated data rather
-        // than growing unboundedly (live WS clients already got
-        // everything either way).
-        void apiClient.startSession().then((id) => {
-          currentSessionId = id;
-          if (id) uploadScheduler.start();
-        });
+        // Register the session with the API in the background, but remember
+        // the promise so a quick End can still wait for the real persisted id.
+        startPersistedSession();
       } else if (isPreflight) {
         console.log(`[preflight] started ${msg.session_id}`);
       }
     } else if (msg.action === "end") {
       stopEmitting();
       pipeline.stop();
-      uploadScheduler.stop();
-      if (currentSessionId && !isPreflight) {
-        const idToClose = currentSessionId;
-        currentSessionId = null;
-        void apiClient.endSession(idToClose);
+      if (!isPreflight) {
+        void endPersistedSession();
       } else if (isPreflight) {
         console.log(`[preflight] ended ${msg.session_id}`);
       }
@@ -512,9 +540,11 @@ async function shutdown(): Promise<void> {
   stopEmitting();
   pipeline.stop();
   uploadScheduler.stop();
-  if (currentSessionId) {
-    uploadScheduler.flush();
-    await apiClient.endSession(currentSessionId);
+  const idToClose = currentSessionId ?? (currentSessionStart ? await currentSessionStart : null);
+  if (idToClose) {
+    currentSessionId = idToClose;
+    await uploadScheduler.flush();
+    await apiClient.endSession(idToClose);
   }
   if (sdkAdapter) await sdkAdapter.destroy();
   await server.close();

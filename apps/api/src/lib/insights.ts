@@ -3,7 +3,9 @@ import { Category, State } from "@flow/shared";
 import { categorizeAppTitles } from "./categorize.js";
 
 function deviceFilter(deviceId?: string): { clause: string; params: string[] } {
-  return deviceId ? { clause: "WHERE device_id = $1", params: [deviceId] } : { clause: "", params: [] };
+  return deviceId
+    ? { clause: "WHERE device_id = $1 AND ended_at IS NOT NULL", params: [deviceId] }
+    : { clause: "WHERE ended_at IS NOT NULL", params: [] };
 }
 
 export interface FocusWindow {

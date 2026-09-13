@@ -68,7 +68,7 @@ export class UploadScheduler {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => this.flush(), FLUSH_INTERVAL_MS);
+    this.timer = setInterval(() => void this.flush(), FLUSH_INTERVAL_MS);
   }
 
   stop(): void {
@@ -79,7 +79,7 @@ export class UploadScheduler {
   }
 
   /** Flush whatever's accumulated right now, regardless of the timer. */
-  flush(): void {
+  async flush(): Promise<void> {
     const sessionId = this.getSessionId();
     const samples = this.drainSamples();
 
@@ -107,7 +107,7 @@ export class UploadScheduler {
     // trims the persisted copy.
     const uploadSamples = samples.map((s) => ({ ...s, landmarks: null, expressions: null }));
 
-    this.api.queueBatch(sessionId, {
+    await this.api.queueBatch(sessionId, {
       samples: uploadSamples,
       events: this.events,
       contexts: this.contexts,

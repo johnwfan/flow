@@ -1,7 +1,7 @@
 import type { Insights, SessionDetail, SessionSummary } from "@/types/api";
 
 const API_BASE_URL = process.env["API_BASE_URL"] ?? "http://localhost:3001";
-const HISTORY_DEVICE_ID = process.env["FLOW_HISTORY_DEVICE_ID"] ?? process.env["DEMO_DEVICE_ID"] ?? "demo-device";
+const HISTORY_DEVICE_ID = process.env["FLOW_HISTORY_DEVICE_ID"] ?? "";
 
 function historyDeviceId(): string | undefined {
   const value = HISTORY_DEVICE_ID.trim();

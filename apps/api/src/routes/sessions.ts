@@ -18,6 +18,11 @@ async function getSessionEvents(app: FastifyInstance, sessionId: string): Promis
   return result.rows;
 }
 
+async function refreshSampleRollups(app: FastifyInstance): Promise<void> {
+  await app.pg.query("CALL refresh_continuous_aggregate('samples_1min', NULL, NULL)");
+  await app.pg.query("CALL refresh_continuous_aggregate('samples_5min', NULL, NULL)");
+}
+
 export async function sessionRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: CreateSessionBody }>("/v1/sessions", async (request, reply) => {
     const { deviceId } = request.body;
@@ -87,8 +92,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
       client.release();
     }
 
-    await app.pg.query("CALL refresh_continuous_aggregate('samples_1min', NULL, NULL)");
-    await app.pg.query("CALL refresh_continuous_aggregate('samples_5min', NULL, NULL)");
+    await refreshSampleRollups(app);
     return reply.code(204).send();
   });
 
@@ -106,6 +110,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     if (updateResult.rowCount === 0) {
       return reply.code(404).send({ error: "session not found" });
     }
+
+    await refreshSampleRollups(app);
 
     const summary = await getSessionSummary(app.pg, sessionId);
     if (!summary) {

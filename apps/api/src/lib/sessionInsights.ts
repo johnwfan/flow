@@ -188,7 +188,7 @@ export async function computeCrossSessionDistractionPattern(
   deviceId?: string,
 ): Promise<CrossSessionDistractionPattern[]> {
   const sessionResult = await pool.query<{ id: string }>(
-    deviceId ? "SELECT id FROM sessions WHERE device_id = $1" : "SELECT id FROM sessions",
+    deviceId ? "SELECT id FROM sessions WHERE device_id = $1 AND ended_at IS NOT NULL" : "SELECT id FROM sessions WHERE ended_at IS NOT NULL",
     deviceId ? [deviceId] : [],
   );
 
