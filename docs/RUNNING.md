@@ -68,8 +68,10 @@ missing and what to do about each one.
    set. If the camera fails, `run-demo.bat` replays a pre-recorded session
    instead (`--demo`).
 
-3. Open http://localhost:3000/session to watch the live waveform, and
-   http://localhost:3000/dashboard afterward for the persisted session.
+3. `run.bat` auto-opens `https://tryflow.study/session` (the deployed
+   site). If you're testing local web/UI changes instead, open
+   http://localhost:3000/session and http://localhost:3000/dashboard by
+   hand — the browser tab `run.bat` opens won't point at localhost.
 
 ## Demo — fastest path to a live session + dashboard
 
@@ -80,23 +82,30 @@ changes that.
 - **Everything local (default):** `pnpm dev:all`, then `run.bat` in a second
   window, exactly as in Development above.
 
-- **Web/API already deployed (e.g. to `tryflow.study`):** you don't need
-  `pnpm dev:all` at all. The `/session` page connects straight to the
+- **Web/API already deployed (e.g. to `tryflow.study`, autodeployed on
+  Vultr):** you don't need `pnpm dev:all` at all — just run the agent.
+  `run.bat` / `run-demo.bat` now open `https://tryflow.study/session` in
+  your default browser and then start the agent, in that order, so
+  double-clicking one file is the whole launch: no separate "start api/web,
+  then remember the URL" step. The `/session` page connects straight to the
   agent's local WebSocket (`ws://localhost:8765` by default — see
-  `NEXT_PUBLIC_AGENT_WS_URL` in `.env.example`), not through the API, so on
-  the same machine as the agent you can just open the deployed site's
-  `/session` page in a browser and start `run.bat`. Session data still
-  persists through whichever API the agent is configured to POST to.
+  `NEXT_PUBLIC_AGENT_WS_URL` in `.env.example`), not through the API, so
+  this works over `localhost` even though the page itself is served from
+  Vultr. Session data still persists through whichever API the agent is
+  configured to POST to (see the note below), so it also shows up on
+  `/dashboard` afterward.
 
   > **Note:** the root `.env.example` documents `API_BASE_URL` as the
   > "agent-side API base URL", but the agent actually loads its own
   > `apps/agent/.env` (see `apps/agent/src/index.ts`), not the root `.env`.
-  > To point a locally-run agent at a deployed API instead of
-  > `http://localhost:3001`, set `API_BASE_URL` in `apps/agent/.env`, not
-  > the root one. If you skip this, the live view still works either way —
-  > persistence to the API is best-effort and the WS broadcast to the
-  > browser doesn't depend on it — but the session won't show up on
-  > whichever dashboard you check afterward.
+  > `apps/agent/.env.example` now defaults this to `https://tryflow.study`
+  > so a locally-run agent persists to the live dashboard out of the box —
+  > override it back to `http://localhost:3001` in `apps/agent/.env` if
+  > you're running api/web locally instead (`pnpm dev:all`). If it's
+  > misconfigured, the live view still works either way — persistence to
+  > the API is best-effort and the WS broadcast to the browser doesn't
+  > depend on it — but the session won't show up on whichever dashboard you
+  > check afterward.
 
 - **Rehearsing the dashboard without waiting on a real detection:** seed a
   realistic ~2-minute session (warmup → focused → zone-out → intervention →

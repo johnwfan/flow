@@ -8,5 +8,7 @@ rem is the laptop's built-in camera, which SmartSpectra can't use).
 rem If you plug the webcam into a different port and the index changes,
 rem edit the number below -- or list devices in PowerShell with:
 rem   Get-PnpDevice -Class Camera | Select-Object Status, FriendlyName
+echo Opening https://tryflow.study/session ...
+start "" "https://tryflow.study/session"
 npx tsx apps/agent/src/index.ts --real --camera 1
 pause
