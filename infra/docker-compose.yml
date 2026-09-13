@@ -3,9 +3,10 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
+    env_file:
+      - ../.env
     expose:
+      - "3000"
       - "3001"
     restart: unless-stopped
 
