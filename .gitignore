@@ -3,6 +3,8 @@
 .flow-device-id
 .turbo/
 .bg-shell/
+apps/agent/spill/
+apps/agent/logs/
 .DS_Store
 Thumbs.db
 nul

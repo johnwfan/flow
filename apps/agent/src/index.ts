@@ -7,8 +7,10 @@ import { SdkAdapter } from "./sdk-adapter.js";
 import { DemoEmitter } from "./demo-emitter.js";
 import { Session } from "./session.js";
 import { Pipeline } from "./pipeline.js";
+import { ApiClient } from "./api-client.js";
+import { UploadScheduler } from "./upload-scheduler.js";
 import { initFileLogging, logBanner, logConfig, logSample, logShutdown } from "./logger.js";
-import type { SampleMessage, StateMessage } from "@flow/shared";
+import type { SampleMessage, StateMessage, WsMessage } from "@flow/shared";
 
 // ── Env ────────────────────────────────────────────────────────────
 // Resolve .env relative to this file (apps/agent/.env), not process.cwd(),
@@ -50,19 +52,42 @@ const port = portIdx >= 0 ? parseInt(args[portIdx + 1]!, 10) : 8765;
 const camIdx = args.indexOf("--camera");
 const cameraIndex = camIdx >= 0 ? parseInt(args[camIdx + 1]!, 10) : 0;
 
-// ── Pipeline (classifier, baseline, window tracker, probes) ───────
-const pipeline = new Pipeline({
-  broadcast: (msg) => server.broadcast(msg),
-});
-
-// ── Session ────────────────────────────────────────────────────────
+// ── Session (constructed first — its deviceId is needed below) ────
 const session = new Session({
   onStateChange: (state: StateMessage) => {
-    server.broadcast(state);
+    broadcastAndRecord(state);
   },
   onWarmupComplete: () => {
     pipeline.onWarmupComplete();
   },
+});
+
+// ── API persistence (R006) ────────────────────────────────────────
+// Best-effort: if the API is unreachable, the session just isn't
+// persisted — live WS clients (the session page) are unaffected either
+// way, since they read straight off the broadcasts below.
+const apiClient = new ApiClient({
+  baseUrl: process.env.API_BASE_URL ?? "http://localhost:3001",
+  deviceId: session.deviceId,
+  spillDir: join(scriptDir, "..", "spill"),
+});
+let currentSessionId: string | null = null;
+const uploadScheduler = new UploadScheduler(
+  apiClient,
+  () => currentSessionId,
+  () => pipeline.uploadBuffer.drain()
+);
+
+// Every broadcast also feeds the upload accumulator (samples excluded —
+// those come from pipeline.uploadBuffer at flush time instead).
+function broadcastAndRecord(msg: WsMessage): void {
+  server.broadcast(msg);
+  uploadScheduler.record(msg);
+}
+
+// ── Pipeline (classifier, baseline, window tracker, probes) ───────
+const pipeline = new Pipeline({
+  broadcast: broadcastAndRecord,
 });
 
 // ── WebSocket server ───────────────────────────────────────────────
@@ -82,18 +107,43 @@ const server = new AgentWsServer({
       return;
     }
 
+    // Capture phase BEFORE handleControl mutates it — a redundant "start"
+    // while already running must not register a second orphan session
+    // (session.start() itself is idempotent-safe and just warns+no-ops,
+    // but apiClient.startSession() has no such guard, so we gate it here).
+    const wasIdle = msg.action === "start" && (session.phase === "idle" || session.phase === "ended");
+
     session.handleControl(msg);
 
     if (msg.action === "start") {
       pipeline.startTracking();
       startEmitting();
+      if (wasIdle) {
+        // Register the session with the API in the background — don't
+        // block sensing/broadcast on it. If it fails, currentSessionId
+        // stays null and UploadScheduler drops accumulated data rather
+        // than growing unboundedly (live WS clients already got
+        // everything either way).
+        void apiClient.startSession().then((id) => {
+          currentSessionId = id;
+          if (id) uploadScheduler.start();
+        });
+      }
     } else if (msg.action === "end") {
       stopEmitting();
       pipeline.stop();
+      uploadScheduler.stop();
+      if (currentSessionId) {
+        const idToClose = currentSessionId;
+        currentSessionId = null;
+        void apiClient.endSession(idToClose);
+      }
     } else if (msg.action === "pause") {
       stopEmitting();
+      uploadScheduler.record(msg);
     } else if (msg.action === "resume") {
       startEmitting();
+      uploadScheduler.record(msg);
     }
   },
 });
@@ -206,6 +256,11 @@ async function shutdown(): Promise<void> {
   demoEmitter?.stop();
   stopEmitting();
   pipeline.stop();
+  uploadScheduler.stop();
+  if (currentSessionId) {
+    uploadScheduler.flush();
+    await apiClient.endSession(currentSessionId);
+  }
   if (sdkAdapter) await sdkAdapter.destroy();
   await server.close();
   process.exit(0);
