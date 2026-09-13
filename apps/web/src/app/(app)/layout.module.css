@@ -1,0 +1,13 @@
+.shell {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 0 34px 100px;
+  max-width: 1240px;
+  margin: 0 auto;
+}

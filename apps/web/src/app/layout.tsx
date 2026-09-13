@@ -1,23 +1,29 @@
 import type { Metadata } from "next";
-import { Inter, Source_Serif_4 } from "next/font/google";
-import { NavBar } from "@/components/layout/NavBar";
+import { Instrument_Sans } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
+
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const sourceSerif = Source_Serif_4({ subsets: ["latin"], variable: "--font-source-serif" });
+// Instrument Sans is self-hosted via next/font/google (no runtime Google
+// Fonts <link>, no layout shift). Geist Mono isn't in next/font/google's
+// catalog (it's Vercel's own font, not a Google Font) — the official
+// `geist` package self-hosts it the same way, backed by next/font/local.
+const instrumentSans = Instrument_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-instrument-sans",
+});
 
 export const metadata: Metadata = {
-  title: "Flow — Smart Focus Tracking",
-  description: "Real-time focus state detection and study analytics",
+  title: "Flow — camera-based focus and physiology coach",
+  description:
+    "Flow reads pulse, breathing, blink rate and gaze off a plain webcam and names the state nothing else measures — eyes on the page, brain gone.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${sourceSerif.variable}`}>
-      <body>
-        <NavBar />
-        <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">{children}</main>
-      </body>
+    <html lang="en" className={`${instrumentSans.variable} ${GeistMono.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

@@ -2,8 +2,188 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-cream text-ink font-sans antialiased;
+/*
+ * Flow design system — tokens ported verbatim from the design prototype
+ * ("Design Pages/Flow.dc.html", the <style> block) which supersedes the
+ * app's original cream/ink theme and the earlier partial port that lived
+ * in app/session/session.module.css (that file's token block has been
+ * removed now that the same values live here on :root).
+ *
+ * See "Design Pages/uploads/Design rebuild with teal accent/README.md"
+ * for the full written spec (layout system, components, motion, voice).
+ */
+
+:root {
+  /* ---- neutrals (blue-tinted, hue 268) ---- */
+  --paper: oklch(0.985 0.004 268);
+  --raise: oklch(1 0 0);
+  --sink: oklch(0.968 0.005 268);
+  --line: oklch(0.905 0.01 268);
+  --line-soft: oklch(0.935 0.008 268);
+  --tick: oklch(0.8 0.018 268);
+  --ink: oklch(0.22 0.028 268);
+  --body: oklch(0.44 0.024 268);
+  --mute: oklch(0.54 0.022 268);
+
+  /* ---- state colours: four states, four-step ramp each ---- */
+  --deep: oklch(0.56 0.185 258);
+  --deep-ink: oklch(0.42 0.17 258);
+  --deep-mid: oklch(0.72 0.13 258);
+  --deep-pale: oklch(0.87 0.06 258);
+
+  --zoned: oklch(0.66 0.038 248);
+  --zoned-ink: oklch(0.45 0.042 248);
+  --zoned-mid: oklch(0.76 0.03 248);
+  --zoned-pale: oklch(0.9 0.018 248);
+
+  --spiral: oklch(0.63 0.215 32);
+  --spiral-ink: oklch(0.47 0.19 32);
+  --spiral-mid: oklch(0.76 0.15 32);
+  --spiral-pale: oklch(0.9 0.065 32);
+
+  --break: oklch(0.8 0.105 82);
+  --break-ink: oklch(0.45 0.09 75);
+  --break-mid: oklch(0.86 0.085 82);
+  --break-pale: oklch(0.94 0.04 82);
+
+  /* no_signal: hatched, never a solid colour */
+  --none-hatch: repeating-linear-gradient(45deg, oklch(0.9 0.012 268) 0 4px, oklch(0.962 0.006 268) 4px 8px);
+
+  /* ---- product identity ---- */
+  --indigo: oklch(0.21 0.012 268);
+  --indigo-lift: oklch(0.27 0.012 268);
+  --indigo-hi: oklch(0.33 0.012 268);
+  --cat-1: oklch(0.38 0.01 268);
+  --cat-2: oklch(0.6 0.01 268);
+  --cat-3: oklch(0.78 0.008 268);
+  --cat-4: oklch(0.9 0.006 268);
+
+  /* ---- spacing (4px ramp) ---- */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+  --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+
+  /* ---- radius ---- */
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px; --r-pill: 999px;
+
+  /* ---- type ---- */
+  --sans: var(--font-instrument-sans), system-ui, sans-serif;
+  --num: var(--font-instrument-sans), system-ui, sans-serif;
+  --mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* type scale — see README "Typography"; size / line-height / tracking / weight */
+  --t-hero-size: 64px; --t-hero-lh: 0.98; --t-hero-ls: -0.05em; --t-hero-weight: 500;
+  --t-display-size: 36px; --t-display-ls: -0.045em; --t-display-weight: 500;
+  --t-title-size: 23px; --t-title-lh: 1.1; --t-title-ls: -0.04em; --t-title-weight: 500;
+  --t-lede-size: 18px; --t-lede-lh: 1.55;
+  --t-body-size: 14px;
+  --t-cap-size: 13px; --t-cap-lh: 1.5;
+  --t-micro-size: 11.5px;
+  --t-mono-size: 10.5px;
+
+  /* ---- motion ---- */
+  --dur-1: 160ms; --dur-2: 280ms; --dur-3: 450ms;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ---- shadow ---- */
+  --shadow-raised: inset 0 1px 0 oklch(1 0 0), 0 0 0 1px var(--line), 0 1px 2px oklch(0.22 0.028 268 / 0.08);
+  --shadow-primary: inset 0 1px 0 oklch(1 0 0 / 0.22), 0 1px 2px oklch(0.22 0.028 268 / 0.3), 0 3px 8px oklch(0.22 0.028 268 / 0.14);
+  --shadow-groove: inset 0 1px 2px oklch(0.22 0.028 268 / 0.09);
+  --shadow-alert: 0 2px 4px oklch(0.22 0.028 268 / 0.05), 0 24px 60px oklch(0.22 0.028 268 / 0.16);
+}
+
+/* Evening variant — set data-mode="dim" on the root to re-point four neutrals. */
+[data-mode="dim"] {
+  --paper: oklch(0.935 0.008 268);
+  --raise: oklch(0.965 0.006 268);
+  --sink: oklch(0.915 0.01 268);
+  --line: oklch(0.865 0.014 268);
+  --line-soft: oklch(0.895 0.012 268);
+  --ink: oklch(0.26 0.03 268);
+  --body: oklch(0.42 0.026 268);
+  --mute: oklch(0.5 0.024 268);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--deep-ink);
+  text-decoration: none;
+}
+a:hover {
+  color: oklch(0.34 0.17 258);
+}
+
+::selection {
+  background: oklch(0.22 0.028 268 / 0.12);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease),
+    opacity var(--dur-1) var(--ease);
+}
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px oklch(0.22 0.028 268 / 0.22);
+}
+button:active {
+  transform: translateY(1px);
+}
+
+input {
+  font: inherit;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes flow-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@keyframes flow-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes flow-load {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
   }
 }

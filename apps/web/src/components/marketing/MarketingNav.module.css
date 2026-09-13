@@ -1,0 +1,86 @@
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: oklch(0.985 0.004 268 / 0.86);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 34px;
+  height: 66px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s5);
+}
+
+.mark {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--indigo);
+  flex: none;
+}
+.markLabel {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  justify-self: center;
+}
+.navLink {
+  position: relative;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--mute);
+  transition: color var(--dur-1) var(--ease);
+}
+.navLink:hover {
+  color: var(--ink);
+}
+
+.right {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+}
+.cta {
+  padding: 9px 20px;
+  border: none;
+  border-radius: var(--r-pill);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  background: var(--indigo);
+  color: oklch(1 0 0);
+  box-shadow: var(--shadow-primary);
+}
+.cta:hover {
+  background: var(--indigo-hi);
+}
