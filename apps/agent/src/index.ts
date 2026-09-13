@@ -196,6 +196,75 @@ let cameraCandidatePos = 0;
 let cameraAttempts = 0;
 const MAX_CAMERA_ATTEMPTS = cameraCandidates.length * 2;
 
+// A camera can open with no error at all and still be the WRONG one --
+// e.g. index 0 happens to be a built-in laptop camera that isn't pointed
+// at anyone (lid angle, privacy shutter, docked setup) while the actual
+// USB webcam sits at a different index. "Opened without throwing" isn't
+// proof it's usable, so track whether SmartSpectra has actually confirmed
+// a face on the current candidate, and if it hasn't within a short search
+// window, treat that the same as a hard failure and move to the next
+// candidate. A single kOk (0) isn't enough proof by itself -- the SDK
+// fires one immediately on open, before it's evaluated a real frame, so
+// require several *consecutive* kOk frames (real sustained detection is
+// continuous at capture framerate; a startup blip is not).
+let faceFoundOnCurrentCamera = false;
+let consecutiveOkFrames = 0;
+const CONFIRM_OK_FRAMES = 10;
+let faceSearchTimer: NodeJS.Timeout | null = null;
+const FACE_SEARCH_WINDOW_MS = 12_000;
+
+function clearFaceSearchTimer(): void {
+  if (faceSearchTimer) {
+    clearTimeout(faceSearchTimer);
+    faceSearchTimer = null;
+  }
+}
+
+/** Give up on the current candidate index and try the next one (or mock if exhausted). */
+function tryNextCamera(reason: string): void {
+  clearFaceSearchTimer();
+  cameraAttempts++;
+  if (cameraAttempts > MAX_CAMERA_ATTEMPTS) {
+    console.error(
+      `[agent] camera unusable on every candidate index (${cameraCandidates.join(", ")}) — falling back to mock`
+    );
+    broadcastCameraRefused(
+      `no working camera found (tried device index ${cameraCandidates.join(", ")})`
+    );
+    startMock();
+    return;
+  }
+  cameraCandidatePos = (cameraCandidatePos + 1) % cameraCandidates.length;
+  const nextIndex = cameraCandidates[cameraCandidatePos]!;
+  console.warn(
+    `[agent] ${reason} — trying device index ${nextIndex} instead (attempt ${cameraAttempts}/${MAX_CAMERA_ATTEMPTS})`
+  );
+  const adapter = sdkAdapter;
+  if (!adapter) return;
+  faceFoundOnCurrentCamera = false; // unproven on the new candidate
+  consecutiveOkFrames = 0;
+  adapter.stop().finally(() => {
+    adapter.setCameraIndex(nextIndex);
+    adapter.start();
+    armFaceSearchTimer();
+  });
+}
+
+/**
+ * Arms the "did this camera ever find a face" watchdog. A no-op once a
+ * face has actually been confirmed on the current camera — pausing and
+ * resuming (e.g. stepping away briefly) shouldn't re-trigger a search
+ * away from a camera already known to work.
+ */
+function armFaceSearchTimer(): void {
+  if (faceFoundOnCurrentCamera) return;
+  clearFaceSearchTimer();
+  faceSearchTimer = setTimeout(() => {
+    if (faceFoundOnCurrentCamera) return;
+    tryNextCamera(`camera opened but found no face within ${FACE_SEARCH_WINDOW_MS / 1000}s`);
+  }, FACE_SEARCH_WINDOW_MS);
+}
+
 async function startEmitting(): Promise<void> {
   if (useReal) {
     if (!sdkAdapter) {
@@ -211,6 +280,19 @@ async function startEmitting(): Promise<void> {
         cameraIndex,
         onSample: handleSample,
         onValidation: (code, hint) => {
+          if (code === 0) {
+            consecutiveOkFrames++;
+            if (!faceFoundOnCurrentCamera && consecutiveOkFrames >= CONFIRM_OK_FRAMES) {
+              // Sustained kOk, not just the one-off blip the SDK fires on
+              // open before it's evaluated a real frame -- lock in this
+              // camera and stop searching for a "better" one.
+              console.log(`[agent] camera confirmed (${CONFIRM_OK_FRAMES} consecutive good frames)`);
+              faceFoundOnCurrentCamera = true;
+              clearFaceSearchTimer();
+            }
+            return;
+          }
+          consecutiveOkFrames = 0;
           // Diagnostic-only, outside the frozen WsMessage contract
           server.broadcastRaw({ kind: "debug_validation", code, hint, ts: Date.now() });
         },
@@ -219,28 +301,7 @@ async function startEmitting(): Promise<void> {
             broadcastCameraRefused(message);
             return;
           }
-          cameraAttempts++;
-          if (cameraAttempts > MAX_CAMERA_ATTEMPTS) {
-            console.error(
-              `[agent] camera failed on every candidate index (${cameraCandidates.join(", ")}) — falling back to mock`
-            );
-            broadcastCameraRefused(
-              `no working camera found (tried device index ${cameraCandidates.join(", ")})`
-            );
-            startMock();
-            return;
-          }
-          // Retry the same index once (transient hiccup), then move to the
-          // next candidate every other failure.
-          if (cameraAttempts % 2 === 0) {
-            cameraCandidatePos = (cameraCandidatePos + 1) % cameraCandidates.length;
-          }
-          const nextIndex = cameraCandidates[cameraCandidatePos]!;
-          console.warn(
-            `[agent] camera start failed (${message}) — retrying on device index ${nextIndex} (attempt ${cameraAttempts}/${MAX_CAMERA_ATTEMPTS})`
-          );
-          sdkAdapter?.setCameraIndex(nextIndex);
-          setTimeout(() => sdkAdapter?.start(), 800);
+          tryNextCamera(`camera start failed (${message})`);
         },
       });
       const ok = await sdkAdapter.init();
@@ -253,6 +314,7 @@ async function startEmitting(): Promise<void> {
       }
     }
     sdkAdapter.start();
+    armFaceSearchTimer();
   } else {
     startMock();
   }
@@ -266,6 +328,7 @@ function startMock(): void {
 }
 
 function stopEmitting(): void {
+  clearFaceSearchTimer();
   if (mockEmitter?.isRunning) {
     mockEmitter.stop();
   }

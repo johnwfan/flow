@@ -76,10 +76,15 @@ export class SdkAdapter {
       });
 
       this.sdk.on("validationStatus", (code: number, _ts: number, hint: string) => {
+        // Forward every status, including kOk (0) -- callers need kOk to
+        // confirm the opened camera is actually seeing a face (e.g. the
+        // face-search watchdog in index.ts), not just that it opened
+        // without throwing. Only log the non-OK ones to avoid spamming
+        // the console every frame while things are fine.
         if (code !== 0) {
           console.log(`[sdk] validation: ${hint} (code=${code})`);
-          this.onValidation?.(code, hint);
         }
+        this.onValidation?.(code, hint);
       });
 
       this.sdk.on("metrics", (buf: Buffer, timestampUs: number) => {
