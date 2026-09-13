@@ -17,28 +17,37 @@ export interface FocusWindow {
 export async function computeFocusWindow(pool: Pool, deviceId?: string): Promise<FocusWindow> {
   const { clause, params } = deviceFilter(deviceId);
   const sessions = await pool.query<{ id: string }>(`SELECT id FROM sessions ${clause}`, params);
+  const sessionIds = sessions.rows.map((s) => s.id);
 
-  // Was a sequential await-in-loop -- one round trip per session, in
-  // series, against a remote DB. Fetch them all concurrently instead (pg's
-  // pool, default max 10, queues the rest safely); the aggregation below
-  // stays a plain synchronous loop over the results.
-  const allBuckets = await Promise.all(
-    sessions.rows.map((session) =>
-      pool.query<{ minute: number; state: string }>(
-        `SELECT extract(epoch FROM (bucket - min(bucket) OVER ())) / 60 AS minute, state
-         FROM samples_1min WHERE session_id = $1 ORDER BY bucket ASC`,
-        [session.id],
-      ),
-    ),
-  );
+  // Was one round trip per session (even parallelized, that's still a full
+  // network round trip each, dozens of times, against a remote DB). A
+  // single query with PARTITION BY session_id gets every session's buckets
+  // -- with "minutes since THIS session's first bucket" preserved exactly
+  // like the old per-session `OVER ()` did -- in one round trip instead.
+  const allRows = sessionIds.length
+    ? await pool.query<{ session_id: string; minute: number; state: string }>(
+        `SELECT session_id,
+                extract(epoch FROM (bucket - min(bucket) OVER (PARTITION BY session_id))) / 60 AS minute,
+                state
+         FROM samples_1min WHERE session_id = ANY($1::uuid[]) ORDER BY session_id, bucket ASC`,
+        [sessionIds],
+      )
+    : { rows: [] };
+
+  const bySession = new Map<string, { minute: number; state: string }[]>();
+  for (const row of allRows.rows) {
+    const arr = bySession.get(row.session_id) ?? [];
+    arr.push(row);
+    bySession.set(row.session_id, arr);
+  }
 
   const dropoffMinutes: number[] = [];
   const minuteBuckets = new Map<number, { total: number; stillFocused: number }>();
 
-  for (const buckets of allBuckets) {
+  for (const rows of bySession.values()) {
     let firstFocusedMinute: number | null = null;
     let dropoffMinute: number | null = null;
-    for (const row of buckets.rows) {
+    for (const row of rows) {
       const sessionMinute = Math.floor(row.minute);
       if (firstFocusedMinute === null) {
         if (row.state !== State.Focused) continue;
@@ -159,19 +168,21 @@ export async function computeSettleTrend(pool: Pool, deviceId?: string): Promise
     params,
   );
 
-  // One round trip per session, concurrently rather than in series -- see
-  // the note on listSessionSummaries.
-  const firstFocusedResults = await Promise.all(
-    sessions.rows.map((session) =>
-      pool.query<{ bucket: Date }>(
-        `SELECT bucket FROM samples_1min WHERE session_id = $1 AND state = $2 ORDER BY bucket ASC LIMIT 1`,
-        [session.id, State.Focused],
-      ),
-    ),
-  );
+  // Was one round trip per session -- DISTINCT ON gets Postgres's own
+  // "first row per group" in a single query across every session at once.
+  const sessionIds = sessions.rows.map((s) => s.id);
+  const firstFocused = sessionIds.length
+    ? await pool.query<{ session_id: string; bucket: Date }>(
+        `SELECT DISTINCT ON (session_id) session_id, bucket
+         FROM samples_1min WHERE session_id = ANY($1::uuid[]) AND state = $2
+         ORDER BY session_id, bucket ASC`,
+        [sessionIds, State.Focused],
+      )
+    : { rows: [] };
+  const firstFocusedBySession = new Map(firstFocused.rows.map((r) => [r.session_id, r.bucket]));
 
-  return sessions.rows.map((session, i) => {
-    const bucket = firstFocusedResults[i]!.rows[0]?.bucket;
+  return sessions.rows.map((session) => {
+    const bucket = firstFocusedBySession.get(session.id);
     const settleSeconds = bucket ? Math.round((bucket.getTime() - session.started_at.getTime()) / 1000) : null;
     return { sessionId: session.id, date: session.started_at.toISOString(), settleSeconds };
   });
@@ -196,8 +207,8 @@ export async function computeBreakQuality(pool: Pool, deviceId?: string): Promis
   );
 
   // Pairing pause/resume events is inherently sequential (order matters),
-  // but doesn't touch the DB -- collect the resume pairs first, then fire
-  // their follow-up queries concurrently instead of one at a time.
+  // but doesn't touch the DB -- collect the resume pairs first, then check
+  // them all in one query below instead of one round trip each.
   const pendingPauseBySession = new Map<string, Date>();
   const resumePairs: { sessionId: string; ts: Date }[] = [];
 
@@ -212,21 +223,26 @@ export async function computeBreakQuality(pool: Pool, deviceId?: string): Promis
     resumePairs.push({ sessionId: row.session_id, ts: row.ts });
   }
 
-  const focusedAfterResults = await Promise.all(
-    resumePairs.map((pair) =>
-      pool.query<{ bucket: Date }>(
-        `SELECT bucket FROM samples_1min
-         WHERE session_id = $1 AND state = $2 AND bucket >= $3::timestamptz AND bucket <= $3::timestamptz + interval '3 minutes'
-         LIMIT 1`,
-        [pair.sessionId, State.Focused, pair.ts],
-      ),
-    ),
+  if (resumePairs.length === 0) return { restorative: 0, depleting: 0 };
+
+  // Was one round trip per resume pair -- a VALUES list turns the whole
+  // set into a single query, checked against samples_1min via EXISTS.
+  const valuesSql = resumePairs.map((_, i) => `($${i * 2 + 1}::uuid, $${i * 2 + 2}::timestamptz)`).join(", ");
+  const valuesParams = resumePairs.flatMap((p) => [p.sessionId, p.ts]);
+  const focusedAfter = await pool.query<{ has_focused: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM samples_1min m
+       WHERE m.session_id = p.session_id AND m.state = $${valuesParams.length + 1}
+         AND m.bucket >= p.resume_ts AND m.bucket <= p.resume_ts + interval '3 minutes'
+     ) AS has_focused
+     FROM (VALUES ${valuesSql}) AS p(session_id, resume_ts)`,
+    [...valuesParams, State.Focused],
   );
 
   let restorative = 0;
   let depleting = 0;
-  for (const result of focusedAfterResults) {
-    if (result.rows.length > 0) restorative += 1;
+  for (const result of focusedAfter.rows) {
+    if (result.has_focused) restorative += 1;
     else depleting += 1;
   }
 
@@ -245,35 +261,29 @@ export interface InterventionEfficacyPoint {
  */
 export async function computeInterventionEfficacy(pool: Pool, deviceId?: string): Promise<InterventionEfficacyPoint[]> {
   const { clause, params } = deviceFilter(deviceId);
-  const sessionFilter = clause ? `AND session_id IN (SELECT id FROM sessions ${clause})` : "";
+  const sessionFilter = clause ? `AND e.session_id IN (SELECT id FROM sessions ${clause})` : "";
 
-  const alerts = await pool.query<{ session_id: string; ts: Date }>(
-    `SELECT session_id, ts FROM events WHERE kind = 'alert' ${sessionFilter} ORDER BY ts ASC`,
+  // Was two round trips per alert (even parallelized, still one network
+  // round trip each). Correlated subqueries compute both averages for
+  // every alert server-side in a single query -- no round trip per alert
+  // at all.
+  const result = await pool.query<{ ts: Date; avg_before: string | null; avg_after: string | null }>(
+    `SELECT e.ts,
+            (SELECT avg(breathing_rpm) FROM samples s WHERE s.session_id = e.session_id
+               AND s.ts BETWEEN e.ts - interval '2 minutes' AND e.ts) AS avg_before,
+            (SELECT avg(breathing_rpm) FROM samples s WHERE s.session_id = e.session_id
+               AND s.ts BETWEEN e.ts AND e.ts + interval '2 minutes') AS avg_after
+     FROM events e
+     WHERE e.kind = 'alert' ${sessionFilter}
+     ORDER BY e.ts ASC`,
     params,
   );
 
-  // Two round trips per alert, all independent of each other -- run the
-  // whole set concurrently instead of two-at-a-time in series.
-  return Promise.all(
-    alerts.rows.map(async (alert) => {
-      const [before, after] = await Promise.all([
-        pool.query<{ avg: string | null }>(
-          `SELECT avg(breathing_rpm) FROM samples WHERE session_id = $1 AND ts BETWEEN $2::timestamptz - interval '2 minutes' AND $2::timestamptz`,
-          [alert.session_id, alert.ts],
-        ),
-        pool.query<{ avg: string | null }>(
-          `SELECT avg(breathing_rpm) FROM samples WHERE session_id = $1 AND ts BETWEEN $2::timestamptz AND $2::timestamptz + interval '2 minutes'`,
-          [alert.session_id, alert.ts],
-        ),
-      ]);
-
-      return {
-        ts: alert.ts.toISOString(),
-        breathingRpmBefore: before.rows[0]?.avg ? Number(before.rows[0].avg) : null,
-        breathingRpmAfter: after.rows[0]?.avg ? Number(after.rows[0].avg) : null,
-      };
-    }),
-  );
+  return result.rows.map((row) => ({
+    ts: row.ts.toISOString(),
+    breathingRpmBefore: row.avg_before ? Number(row.avg_before) : null,
+    breathingRpmAfter: row.avg_after ? Number(row.avg_after) : null,
+  }));
 }
 
 export interface ValidationResult {

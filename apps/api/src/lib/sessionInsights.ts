@@ -191,33 +191,57 @@ export async function computeCrossSessionDistractionPattern(
     deviceId ? "SELECT id FROM sessions WHERE device_id = $1 AND ended_at IS NOT NULL" : "SELECT id FROM sessions WHERE ended_at IS NOT NULL",
     deviceId ? [deviceId] : [],
   );
+  const sessionIds = sessionResult.rows.map((s) => s.id);
 
-  // Was two sequential round trips per session, in series -- fetch every
-  // session's data concurrently instead (still skipping the contextTimeline
-  // query for sessions with no distraction episodes, same as before); the
-  // byKey aggregation below is a plain synchronous pass over the results
-  // and doesn't care what order sessions finish in.
-  const perSession = await Promise.all(
-    sessionResult.rows.map(async (session) => {
-      const buckets = await pool.query<DistractedBucketRow>(
-        `SELECT bucket, state FROM samples_1min
-         WHERE session_id = $1 AND state = ANY($2::text[])
-         ORDER BY bucket ASC`,
-        [session.id, [State.ZonedOut, State.Spiraling]],
-      );
-      if (buckets.rows.length === 0) return null;
+  // Was two round trips per session -- fetch every session's distracted
+  // buckets in a single batched query instead. Episode derivation still
+  // happens per session (bucketsToEpisodes assumes bucket continuity
+  // within one session, so rows are grouped back out by session_id
+  // before calling it, not run on the mixed batch directly).
+  const allBuckets = sessionIds.length
+    ? await pool.query<DistractedBucketRow & { session_id: string }>(
+        `SELECT session_id, bucket, state FROM samples_1min
+         WHERE session_id = ANY($1::uuid[]) AND state = ANY($2::text[])
+         ORDER BY session_id, bucket ASC`,
+        [sessionIds, [State.ZonedOut, State.Spiraling]],
+      )
+    : { rows: [] };
 
-      const episodes = bucketsToEpisodes(buckets.rows);
-      const contextTimeline = await getAppContextTimeline(pool, session.id);
-      return { episodes, contextTimeline };
-    }),
-  );
+  const bucketsBySession = new Map<string, DistractedBucketRow[]>();
+  for (const row of allBuckets.rows) {
+    const arr = bucketsBySession.get(row.session_id) ?? [];
+    arr.push({ bucket: row.bucket, state: row.state });
+    bucketsBySession.set(row.session_id, arr);
+  }
+
+  const episodesBySession = new Map<string, DistractedEpisode[]>();
+  for (const [sessionId, buckets] of bucketsBySession) {
+    episodesBySession.set(sessionId, bucketsToEpisodes(buckets));
+  }
+
+  // Only fetch context timelines for sessions that actually had a
+  // distraction episode, same as the old per-session skip-if-empty check.
+  const sessionsWithEpisodes = [...episodesBySession.keys()];
+  const allContexts = sessionsWithEpisodes.length
+    ? await pool.query<AppContextRow & { session_id: string }>(
+        `SELECT session_id, ts, payload->>'app_title' AS app_title, payload->>'category' AS category
+         FROM events WHERE session_id = ANY($1::uuid[]) AND kind = 'app_context'
+         ORDER BY session_id, ts ASC`,
+        [sessionsWithEpisodes],
+      )
+    : { rows: [] };
+
+  const contextsBySession = new Map<string, AppContextRow[]>();
+  for (const row of allContexts.rows) {
+    const arr = contextsBySession.get(row.session_id) ?? [];
+    arr.push({ ts: row.ts, app_title: row.app_title, category: row.category });
+    contextsBySession.set(row.session_id, arr);
+  }
 
   const byKey = new Map<string, Omit<CrossSessionDistractionPattern, "avgMinutesPerEpisode">>();
 
-  for (const result of perSession) {
-    if (!result) continue;
-    const { episodes, contextTimeline } = result;
+  for (const [sessionId, episodes] of episodesBySession) {
+    const contextTimeline = contextsBySession.get(sessionId) ?? [];
 
     for (const episode of episodes) {
       const app = appAt(contextTimeline, episode.startedAt.getTime());
