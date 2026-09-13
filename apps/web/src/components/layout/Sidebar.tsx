@@ -8,15 +8,13 @@ import styles from "./Sidebar.module.css";
 // the existing `/dashboard` URL rather than renaming the route — noted
 // here so it isn't mistaken for a bug later.
 const NAV_ITEMS = [
-  { href: "/session", label: "Session" },
+  { href: "/session", label: "Tracker" },
   { href: "/dashboard", label: "Sessions" },
   { href: "/insights", label: "Insights" },
   { href: "/validation", label: "Validation" },
 ] as const;
 
-// Placeholder session count. Real data (from the API) is wired in by
-// another pass — this is a static stand-in so the sidebar isn't empty.
-const PLACEHOLDER_SESSION_COUNT = 14;
+const HISTORY_STATUS = "Past sessions";
 
 function isActive(pathname: string, href: string) {
   if (href === "/dashboard") {
@@ -55,13 +53,13 @@ export function Sidebar() {
         <div className={styles.rule} />
         <div className={styles.statusRow}>
           <span className={styles.statusDot} />
-          <span className={styles.statusText}>{PLACEHOLDER_SESSION_COUNT} sessions</span>
+          <span className={styles.statusText}>{HISTORY_STATUS}</span>
         </div>
         <div className={styles.supportLine}>
           Frames stay on this machine. Camera-based physiological sensing.
         </div>
         <Link href="/session" className={styles.startBtn}>
-          Start a session
+          Start tracker
         </Link>
       </div>
     </aside>

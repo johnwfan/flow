@@ -138,7 +138,9 @@ changes that.
   `DEMO_DEVICE_ID` (default `demo-device`) with 24 past sessions. Set
   `DEMO_HISTORY_SESSIONS=40` to create more, or `DEMO_HISTORY_APPEND=1` to
   append instead of replacing. Set `DEMO_HISTORY_DRY_RUN=1` to verify the
-  generated shape without touching the DB.
+  generated shape without touching the DB. The web history/insights pages read
+  `FLOW_HISTORY_DEVICE_ID` (default `demo-device`), so this seeded history is
+  what populates Sessions unless you set `FLOW_HISTORY_DEVICE_ID=all`.
 
 ## Smoke test — verify wiring before a live demo
 

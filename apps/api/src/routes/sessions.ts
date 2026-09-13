@@ -61,6 +61,37 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     return { summary, timeline, alerts, contexts, probes, insights: { ...distraction, tips } };
   });
 
+  app.delete<{ Params: { id: string } }>("/v1/sessions/:id", async (request, reply) => {
+    const sessionId = request.params.id;
+    const client = await app.pg.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const existing = await client.query<{ id: string }>("SELECT id FROM sessions WHERE id = $1", [sessionId]);
+      if (existing.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return reply.code(404).send({ error: "session not found" });
+      }
+
+      await client.query("DELETE FROM events WHERE session_id = $1", [sessionId]);
+      await client.query("DELETE FROM batch_keys WHERE session_id = $1", [sessionId]);
+      await client.query("DELETE FROM samples WHERE session_id = $1", [sessionId]);
+      await client.query("DELETE FROM sessions WHERE id = $1", [sessionId]);
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    await app.pg.query("CALL refresh_continuous_aggregate('samples_1min', NULL, NULL)");
+    await app.pg.query("CALL refresh_continuous_aggregate('samples_5min', NULL, NULL)");
+    return reply.code(204).send();
+  });
+
   app.post<{ Params: { id: string } }>("/v1/sessions/:id/end", async (request, reply) => {
     const sessionId = request.params.id;
 

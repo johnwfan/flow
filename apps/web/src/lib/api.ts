@@ -1,6 +1,12 @@
 import type { Insights, SessionDetail, SessionSummary } from "@/types/api";
 
 const API_BASE_URL = process.env["API_BASE_URL"] ?? "http://localhost:3001";
+const HISTORY_DEVICE_ID = process.env["FLOW_HISTORY_DEVICE_ID"] ?? process.env["DEMO_DEVICE_ID"] ?? "demo-device";
+
+function historyDeviceId(): string | undefined {
+  const value = HISTORY_DEVICE_ID.trim();
+  return value.length > 0 && value.toLowerCase() !== "all" ? value : undefined;
+}
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
@@ -11,7 +17,8 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 export async function getSessions(deviceId?: string): Promise<SessionSummary[]> {
-  const query = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
+  const queryDeviceId = deviceId ?? historyDeviceId();
+  const query = queryDeviceId ? `?deviceId=${encodeURIComponent(queryDeviceId)}` : "";
   const data = await fetchJson<{ sessions: SessionSummary[] }>(`/v1/sessions${query}`);
   return data.sessions;
 }
@@ -24,6 +31,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
 }
 
 export async function getInsights(deviceId?: string): Promise<Insights> {
-  const query = deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : "";
+  const queryDeviceId = deviceId ?? historyDeviceId();
+  const query = queryDeviceId ? `?deviceId=${encodeURIComponent(queryDeviceId)}` : "";
   return fetchJson<Insights>(`/v1/insights${query}`);
 }

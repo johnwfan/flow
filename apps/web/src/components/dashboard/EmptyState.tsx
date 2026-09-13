@@ -22,7 +22,7 @@ export function EmptyState() {
           fontWeight: 500,
         }}
       >
-        Start a session
+        Start tracker
       </Link>
     </div>
   );
