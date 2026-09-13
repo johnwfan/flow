@@ -1,10 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { spawn } from "node:child_process";
 import dotenv from "dotenv";
 import { AgentWsServer } from "./ws-server.js";
 import { MockEmitter } from "./mock-emitter.js";
-import { SdkAdapter } from "./sdk-adapter.js";
+import { SdkWorkerAdapter } from "./sdk-worker-adapter.js";
 import { DemoEmitter } from "./demo-emitter.js";
 import { Session } from "./session.js";
 import { Pipeline } from "./pipeline.js";
@@ -247,7 +246,7 @@ function handleSample(sample: SampleMessage): void {
 
 // ── Emitter setup ──────────────────────────────────────────────────
 let mockEmitter: MockEmitter | null = null;
-let sdkAdapter: SdkAdapter | null = null;
+let sdkAdapter: SdkWorkerAdapter | null = null;
 let demoEmitter: DemoEmitter | null = null;
 
 function startDemo(): void {
@@ -259,38 +258,6 @@ function startDemo(): void {
   } catch (err: any) {
     console.error(`[demo] failed to start: ${err.message}`);
   }
-}
-
-function scheduleAgentSelfRestart(): void {
-  if (process.env.FLOW_AGENT_AUTO_RESTART !== "1") return;
-
-  const payload = JSON.stringify({
-    execPath: process.execPath,
-    execArgv: process.execArgv,
-    argv: process.argv.slice(1),
-    cwd: process.cwd(),
-  });
-
-  const helperScript = `
-const { spawn } = require("node:child_process");
-const payload = ${payload};
-setTimeout(() => {
-  const child = spawn(payload.execPath, [...payload.execArgv, ...payload.argv], {
-    cwd: payload.cwd,
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-  });
-  child.unref();
-}, 2000);
-`;
-
-  const helper = spawn(process.execPath, ["-e", helperScript], {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-  });
-  helper.unref();
 }
 
 // Broadcast a fatal camera/SDK failure so the live session page can be
@@ -341,8 +308,6 @@ const FACE_SEARCH_WINDOW_MS = 12_000;
 // unstable camera still eventually falls back to mock instead of retrying
 // forever.
 const TIMESTAMP_GAP_ERROR_CODE = 11;
-const SMARTSPECTRA_PROCESSING_FAILED_ERROR_CODE = 8;
-const SMARTSPECTRA_RESTART_EXIT_CODE = 88;
 let timestampGapRetries = 0;
 const MAX_TIMESTAMP_GAP_RETRIES = 5;
 // If a restart stays up this long without another gap error, treat the
@@ -381,7 +346,7 @@ function finishCameraRecovery(): void {
   }
 }
 
-function stopAdapterForRecovery(adapter: SdkAdapter, context: string): Promise<void> {
+function stopAdapterForRecovery(adapter: SdkWorkerAdapter, context: string): Promise<void> {
   let timeout: NodeJS.Timeout | null = null;
   return Promise.race([
     adapter.stop().catch((err) => {
@@ -598,7 +563,7 @@ async function startEmitting({ freshSession = false }: { freshSession?: boolean 
         broadcastCameraRefused("SMARTSPECTRA_API_KEY not set");
         return;
       }
-      sdkAdapter = new SdkAdapter({
+      sdkAdapter = new SdkWorkerAdapter({
         apiKey,
         cameraIndex: initialCameraIndex,
         onSample: handleSample,
@@ -617,15 +582,6 @@ async function startEmitting({ freshSession = false }: { freshSession?: boolean 
           }
         },
         onError: (code, message, retryable) => {
-          if (code === SMARTSPECTRA_PROCESSING_FAILED_ERROR_CODE) {
-            console.error(
-              `[agent] SmartSpectra entered processing error state (${message}); exiting for supervised restart`
-            );
-            scheduleAgentSelfRestart();
-            instanceLock?.release();
-            process.kill(process.pid, "SIGKILL");
-            process.exit(SMARTSPECTRA_RESTART_EXIT_CODE);
-          }
           if (code === TIMESTAMP_GAP_ERROR_CODE) {
             if (gapStabilityTimer) {
               clearTimeout(gapStabilityTimer);
