@@ -77,7 +77,7 @@
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.015em;
-  box-shadow: 0 2px 10px oklch(0.22 0.028 268 / 0.14);
+  box-shadow: 0 2px 10px oklch(0.22 0 0 / 0.14);
 }
 .primaryCta:hover {
   background: var(--indigo-hi);
@@ -254,5 +254,5 @@
   letter-spacing: -0.015em;
 }
 .closingCta:hover {
-  background: oklch(0.94 0.004 268);
+  background: oklch(0.94 0 0);
 }

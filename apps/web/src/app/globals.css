@@ -14,22 +14,24 @@
  */
 
 :root {
-  /* ---- neutrals (blue-tinted, hue 268) ---- */
-  --paper: oklch(0.985 0.004 268);
+  /* ---- neutrals (monochrome — chroma 0, no hue tint) ---- */
+  --paper: oklch(0.985 0 0);
   --raise: oklch(1 0 0);
-  --sink: oklch(0.968 0.005 268);
-  --line: oklch(0.905 0.01 268);
-  --line-soft: oklch(0.935 0.008 268);
-  --tick: oklch(0.8 0.018 268);
-  --ink: oklch(0.22 0.028 268);
-  --body: oklch(0.44 0.024 268);
-  --mute: oklch(0.54 0.022 268);
+  --sink: oklch(0.968 0 0);
+  --line: oklch(0.905 0 0);
+  --line-soft: oklch(0.935 0 0);
+  --tick: oklch(0.8 0 0);
+  --ink: oklch(0.22 0 0);
+  --body: oklch(0.44 0 0);
+  --mute: oklch(0.54 0 0);
 
   /* ---- state colours: four states, four-step ramp each ---- */
-  --deep: oklch(0.56 0.185 258);
-  --deep-ink: oklch(0.42 0.17 258);
-  --deep-mid: oklch(0.72 0.13 258);
-  --deep-pale: oklch(0.87 0.06 258);
+  /* deep_work is the one deliberate accent against an otherwise monochrome
+     UI — deeper and more saturated than the original prototype value. */
+  --deep: oklch(0.5 0.24 258);
+  --deep-ink: oklch(0.36 0.22 258);
+  --deep-mid: oklch(0.68 0.16 258);
+  --deep-pale: oklch(0.86 0.08 258);
 
   --zoned: oklch(0.66 0.038 248);
   --zoned-ink: oklch(0.45 0.042 248);
@@ -47,16 +49,16 @@
   --break-pale: oklch(0.94 0.04 82);
 
   /* no_signal: hatched, never a solid colour */
-  --none-hatch: repeating-linear-gradient(45deg, oklch(0.9 0.012 268) 0 4px, oklch(0.962 0.006 268) 4px 8px);
+  --none-hatch: repeating-linear-gradient(45deg, oklch(0.9 0 0) 0 4px, oklch(0.962 0 0) 4px 8px);
 
-  /* ---- product identity ---- */
-  --indigo: oklch(0.21 0.012 268);
-  --indigo-lift: oklch(0.27 0.012 268);
-  --indigo-hi: oklch(0.33 0.012 268);
-  --cat-1: oklch(0.38 0.01 268);
-  --cat-2: oklch(0.6 0.01 268);
-  --cat-3: oklch(0.78 0.008 268);
-  --cat-4: oklch(0.9 0.006 268);
+  /* ---- product identity (monochrome — black/near-black, no hue tint) ---- */
+  --indigo: oklch(0.21 0 0);
+  --indigo-lift: oklch(0.27 0 0);
+  --indigo-hi: oklch(0.33 0 0);
+  --cat-1: oklch(0.38 0 0);
+  --cat-2: oklch(0.6 0 0);
+  --cat-3: oklch(0.78 0 0);
+  --cat-4: oklch(0.9 0 0);
 
   /* ---- spacing (4px ramp) ---- */
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
@@ -85,22 +87,22 @@
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* ---- shadow ---- */
-  --shadow-raised: inset 0 1px 0 oklch(1 0 0), 0 0 0 1px var(--line), 0 1px 2px oklch(0.22 0.028 268 / 0.08);
-  --shadow-primary: inset 0 1px 0 oklch(1 0 0 / 0.22), 0 1px 2px oklch(0.22 0.028 268 / 0.3), 0 3px 8px oklch(0.22 0.028 268 / 0.14);
-  --shadow-groove: inset 0 1px 2px oklch(0.22 0.028 268 / 0.09);
-  --shadow-alert: 0 2px 4px oklch(0.22 0.028 268 / 0.05), 0 24px 60px oklch(0.22 0.028 268 / 0.16);
+  --shadow-raised: inset 0 1px 0 oklch(1 0 0), 0 0 0 1px var(--line), 0 1px 2px oklch(0.22 0 0 / 0.08);
+  --shadow-primary: inset 0 1px 0 oklch(1 0 0 / 0.22), 0 1px 2px oklch(0.22 0 0 / 0.3), 0 3px 8px oklch(0.22 0 0 / 0.14);
+  --shadow-groove: inset 0 1px 2px oklch(0.22 0 0 / 0.09);
+  --shadow-alert: 0 2px 4px oklch(0.22 0 0 / 0.05), 0 24px 60px oklch(0.22 0 0 / 0.16);
 }
 
 /* Evening variant — set data-mode="dim" on the root to re-point four neutrals. */
 [data-mode="dim"] {
-  --paper: oklch(0.935 0.008 268);
-  --raise: oklch(0.965 0.006 268);
-  --sink: oklch(0.915 0.01 268);
-  --line: oklch(0.865 0.014 268);
-  --line-soft: oklch(0.895 0.012 268);
-  --ink: oklch(0.26 0.03 268);
-  --body: oklch(0.42 0.026 268);
-  --mute: oklch(0.5 0.024 268);
+  --paper: oklch(0.935 0 0);
+  --raise: oklch(0.965 0 0);
+  --sink: oklch(0.915 0 0);
+  --line: oklch(0.865 0 0);
+  --line-soft: oklch(0.895 0 0);
+  --ink: oklch(0.26 0 0);
+  --body: oklch(0.42 0 0);
+  --mute: oklch(0.5 0 0);
 }
 
 * {

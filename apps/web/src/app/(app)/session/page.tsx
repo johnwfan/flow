@@ -23,12 +23,12 @@ const STATE_COLOR: Record<string, string> = {
 // need the probe inside that subtree, which is more fragile than just
 // keeping one small duplicate map in sync with the CSS file.
 const STATE_STROKE: Record<string, string> = {
-  deep: "oklch(0.56 0.185 255)",
+  deep: "oklch(0.5 0.24 258)",
   zoned: "oklch(0.66 0.038 248)",
   spiral: "oklch(0.63 0.215 32)",
   break: "oklch(0.8 0.105 82)",
 };
-const MUTE_STROKE = "oklch(0.54 0.022 268)";
+const MUTE_STROKE = "oklch(0.54 0 0)";
 
 function colorVar(state: string | null, step: "" | "-ink" | "-mid" | "-pale" = ""): string {
   const key = state ? STATE_COLOR[state] : undefined;
@@ -78,8 +78,8 @@ function Waveform({ series, color, height }: { series: RollingSeries; color: str
       const h = rect.height;
       ctx.clearRect(0, 0, w, h);
 
-      // gridlines (matches --line-soft in session.module.css)
-      ctx.strokeStyle = "oklch(0.935 0.008 268)";
+      // gridlines (matches --line-soft, now monochrome)
+      ctx.strokeStyle = "oklch(0.935 0 0)";
       ctx.lineWidth = 1;
       for (let i = 1; i < 3; i++) {
         const y = (h / 3) * i;
