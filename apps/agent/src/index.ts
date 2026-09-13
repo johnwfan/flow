@@ -183,6 +183,19 @@ function broadcastCameraRefused(reason: string): void {
   server.broadcastRaw({ kind: "debug_error", fatal: true, reason, ts: Date.now() });
 }
 
+// ── Camera auto-probe ────────────────────────────────────────────────
+// `--camera <n>` (or its default) is a guess: SmartSpectra's device index
+// doesn't necessarily match Windows' device order, and whatever webcam it
+// was last tuned for may not even be plugged in anymore. Rather than fail
+// once and quietly run the classifier on frozen fallback numbers, cycle
+// through a small set of candidate indices — the requested one first, then
+// 0-3 — retrying each once (a real driver hiccup is often transient) before
+// moving on. Only give up (fall back to mock) once every candidate fails.
+const cameraCandidates = Array.from(new Set([cameraIndex, 0, 1, 2, 3]));
+let cameraCandidatePos = 0;
+let cameraAttempts = 0;
+const MAX_CAMERA_ATTEMPTS = cameraCandidates.length * 2;
+
 async function startEmitting(): Promise<void> {
   if (useReal) {
     if (!sdkAdapter) {
@@ -202,7 +215,32 @@ async function startEmitting(): Promise<void> {
           server.broadcastRaw({ kind: "debug_validation", code, hint, ts: Date.now() });
         },
         onError: (code, message, retryable) => {
-          if (!retryable) broadcastCameraRefused(message);
+          if (!retryable) {
+            broadcastCameraRefused(message);
+            return;
+          }
+          cameraAttempts++;
+          if (cameraAttempts > MAX_CAMERA_ATTEMPTS) {
+            console.error(
+              `[agent] camera failed on every candidate index (${cameraCandidates.join(", ")}) — falling back to mock`
+            );
+            broadcastCameraRefused(
+              `no working camera found (tried device index ${cameraCandidates.join(", ")})`
+            );
+            startMock();
+            return;
+          }
+          // Retry the same index once (transient hiccup), then move to the
+          // next candidate every other failure.
+          if (cameraAttempts % 2 === 0) {
+            cameraCandidatePos = (cameraCandidatePos + 1) % cameraCandidates.length;
+          }
+          const nextIndex = cameraCandidates[cameraCandidatePos]!;
+          console.warn(
+            `[agent] camera start failed (${message}) — retrying on device index ${nextIndex} (attempt ${cameraAttempts}/${MAX_CAMERA_ATTEMPTS})`
+          );
+          sdkAdapter?.setCameraIndex(nextIndex);
+          setTimeout(() => sdkAdapter?.start(), 800);
         },
       });
       const ok = await sdkAdapter.init();

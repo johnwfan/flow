@@ -15,6 +15,12 @@ export class SdkAdapter {
   private running = false;
   private apiKey: string;
   private cameraIndex: number;
+  // Set whenever the native session errors out (sync throw from start(), or
+  // an async 'error' event). The SDK requires reset() to rebuild the
+  // pipeline after kError before the next start() — skipping it is why a
+  // single camera-open failure used to wedge every subsequent start() with
+  // a misleading "session already started" instead of actually retrying.
+  private needsReset = false;
 
   constructor(opts: {
     apiKey: string;
@@ -86,6 +92,8 @@ export class SdkAdapter {
 
       this.sdk.on("error", (code: number, message: string, retryable: boolean) => {
         console.error(`[sdk] error ${code}: ${message} (retryable=${retryable})`);
+        this.running = false;
+        this.needsReset = true;
         this.onError?.(code, message, retryable);
       });
 
@@ -97,6 +105,11 @@ export class SdkAdapter {
     }
   }
 
+  /** Change which camera device the next start() opens. No-op while running. */
+  setCameraIndex(index: number): void {
+    this.cameraIndex = index;
+  }
+
   start(): void {
     if (!this.sdk) {
       console.error("[sdk] not initialized — call init() first");
@@ -106,17 +119,31 @@ export class SdkAdapter {
       console.warn("[sdk] start() called while already running — ignoring duplicate start");
       return;
     }
+    if (this.needsReset) {
+      // Rebuild the native pipeline after a prior error. Without this, the
+      // next useCamera()+start() below throws "session already started"
+      // forever instead of actually retrying, regardless of camera index.
+      try {
+        this.sdk.reset();
+      } catch (err: any) {
+        console.warn(`[sdk] reset before retry failed: ${err.message}`);
+      }
+      this.needsReset = false;
+    }
     try {
       this.sdk.useCamera({ deviceIndex: this.cameraIndex });
       this.sdk.start();
       this.running = true;
-      console.log("[sdk] camera capture started");
+      console.log(`[sdk] camera capture started (device index ${this.cameraIndex})`);
     } catch (err: any) {
       // The native binding throws synchronously (e.g. camera already in use
-      // by another process, or a duplicate start reaching the native layer).
-      // Never let this crash the whole agent process mid-session.
+      // by another process, camera index doesn't exist, or a duplicate
+      // start reaching the native layer). Never let this crash the whole
+      // agent process mid-session — mark for reset so the next start()
+      // (same or different camera index) actually gets a clean attempt.
       console.error(`[sdk] start failed: ${err.message} — is another app using the camera?`);
       this.running = false;
+      this.needsReset = true;
     }
   }
 

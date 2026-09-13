@@ -3,12 +3,12 @@ title Flow Agent
 cd /d "%~dp0"
 echo Starting Flow Agent (live camera)...
 echo If the camera fails, close this and run run-demo.bat instead.
-rem --camera 1 selects the external USB webcam on this machine (index 0
-rem is the laptop's built-in camera, which SmartSpectra can't use).
-rem If you plug the webcam into a different port and the index changes,
-rem edit the number below -- or list devices in PowerShell with:
-rem   Get-PnpDevice -Class Camera | Select-Object Status, FriendlyName
+rem No fixed --camera index: the agent now probes device indices 0-3 on
+rem its own and retries after a failed open (see src/index.ts's camera
+rem auto-probe), since whichever webcam a hardcoded index pointed at may
+rem not be the one plugged in right now. List what Windows currently sees
+rem with: Get-PnpDevice -Class Camera | Select-Object Status, FriendlyName
 echo Opening https://tryflow.study/session ...
 start "" "https://tryflow.study/session"
-npx tsx apps/agent/src/index.ts --real --camera 1
+npx tsx apps/agent/src/index.ts --real
 pause

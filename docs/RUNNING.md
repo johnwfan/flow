@@ -59,14 +59,20 @@ missing and what to do about each one.
    run.bat
    ```
 
-   This runs `npx tsx apps/agent/src/index.ts --real --camera 1` (camera
-   index `1` selects an external USB webcam on the original dev machine;
-   index `0` is usually the built-in laptop camera, which SmartSpectra
-   can't use — list devices with `Get-PnpDevice -Class Camera | Select-Object
-   Status, FriendlyName` in PowerShell and edit the number in `run.bat` if
-   yours differs). Requires `apps/agent/.env` with `SMARTSPECTRA_API_KEY`
-   set. If the camera fails, `run-demo.bat` replays a pre-recorded session
-   instead (`--demo`).
+   This runs `npx tsx apps/agent/src/index.ts --real`. It no longer needs a
+   hardcoded `--camera <n>`: SmartSpectra's device index doesn't reliably
+   match Windows' own device order, and whichever webcam a fixed index
+   pointed at may not be the one currently plugged in, so the agent probes
+   indices 0-3 itself and retries after a failed open (see the camera
+   auto-probe in `src/index.ts`) before giving up and falling back to mock.
+   Pass `--camera <n>` explicitly to pin one index instead (e.g. if a
+   built-in laptop camera keeps winning the race over an external one you
+   want). List what Windows currently sees with `Get-PnpDevice -Class
+   Camera | Select-Object Status, FriendlyName` in PowerShell — a `Status`
+   other than `OK` means that device isn't actually connected right now.
+   Requires `apps/agent/.env` with `SMARTSPECTRA_API_KEY` set. If the
+   camera fails, `run-demo.bat` replays a pre-recorded session instead
+   (`--demo`).
 
 3. `run.bat` auto-opens `https://tryflow.study/session` (the deployed
    site). If you're testing local web/UI changes instead, open
