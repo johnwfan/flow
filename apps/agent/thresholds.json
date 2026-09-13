@@ -18,7 +18,8 @@
   "classifier": {
     "eval_interval_ms": 1000,
     "hysteresis_s": 5,
-    "confidence_threshold": 0.5
+    "confidence_threshold": 0.5,
+    "no_signal_debounce_s": 4
   },
   "breathing_guide": {
     "ie_ratio": 1.5,

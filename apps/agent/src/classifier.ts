@@ -33,6 +33,10 @@ export class Classifier {
   // Recent samples for windowed analysis
   private recentSamples = new RingBuffer<SampleMessage>(200); // ~10s at 20Hz
 
+  // How long confidence has been continuously below threshold -- see the
+  // debounce in evaluate(). null while confidence is fine.
+  private lowConfidenceSince: number | null = null;
+
   constructor(
     private baseline: BaselineStats,
     private callbacks: ClassifierCallbacks
@@ -82,12 +86,23 @@ export class Classifier {
 
     if (samples.length < 20) return; // need minimum data
 
-    // Check confidence — if too low, we're in NoSignal
+    // Check confidence — sustained low confidence means NoSignal. A brief
+    // dip (motion, a CPU hiccup on the machine also running the browser
+    // dashboard) is common and isn't the same as actually losing tracking
+    // -- the SDK's own per-frame framing feedback keeps working through
+    // it, so flipping the whole displayed state on the very first low
+    // tick was confusing ("it said lost signal but the webcam was still
+    // clearly tracking me"). Require it to persist before believing it.
     const avgConf = avg(samples.map((s) => s.conf).filter(notNull));
     if (avgConf < th.classifier.confidence_threshold) {
-      this.transitionTo(State.NoSignal, ["low_confidence"], now, th);
+      if (this.lowConfidenceSince == null) this.lowConfidenceSince = now;
+      const debounceMs = (th.classifier.no_signal_debounce_s ?? 4) * 1000;
+      if (now - this.lowConfidenceSince >= debounceMs) {
+        this.transitionTo(State.NoSignal, ["low_confidence"], now, th);
+      }
       return;
     }
+    this.lowConfidenceSince = null;
 
     // Compute current metrics
     const avgHrv = avg(samples.map((s) => s.hrv_ms).filter(notNull));

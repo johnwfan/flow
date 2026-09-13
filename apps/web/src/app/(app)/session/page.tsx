@@ -130,7 +130,10 @@ function narrativeFor(state: string): string {
     case "break":
       return "Away from the screen";
     case "no_signal":
-      return "Lost your face for a moment";
+      // Driven by pulse-reading confidence dropping, not by losing the
+      // face itself -- framing feedback and the camera keep working
+      // through this, so don't word it like a connection/tracking loss.
+      return "Signal's weak right now";
     default:
       return readableState(state);
   }
@@ -216,6 +219,18 @@ interface RollingSeries {
 
 const SERIES_LENGTH = 300; // ~15s at 20Hz
 const SPARK_TAIL = 40; // matches the reference prototype's 40-sample sparkline window
+
+// This page runs 7 independent canvases (2 big Waveforms + 5 rail
+// Sparklines), each previously redrawing on every requestAnimationFrame
+// tick (up to 60fps) forever, even though the underlying values only
+// change a few times a second. On the same machine that's also running
+// SmartSpectra's native video pipeline, that's real, sustained main-thread
+// CPU competing with it -- confirmed live: physiological signal quality
+// (breathing especially) visibly improved the moment the tab lost focus
+// and Chrome throttled these rAF loops on its own. Capping the redraw
+// rate ourselves gets that CPU back while the tab stays in the
+// foreground, where the page is actually supposed to be used.
+const DRAW_INTERVAL_MS = 80; // ~12fps -- smooth enough for slowly-varying vitals
 const INTEGRATED_CAMERA_PATTERNS = [/integrated/i, /built.?in/i, /internal/i, /hp wide vision/i, /hp true vision/i];
 const SENSING_CAMERA_PATTERNS = [/hd webcam/i, /brio/i, /logitech/i, /usb/i, /elgato/i];
 
@@ -310,12 +325,18 @@ function Waveform({
   // Eased vertical range -- a single outlier sample shouldn't make the
   // whole plot visibly jump. Persists across frames via ref.
   const scaleRef = useRef<{ lo: number; hi: number } | null>(null);
+  const lastDrawRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let raf: number;
-    const draw = () => {
+    const draw = (t: number) => {
+      if (t - lastDrawRef.current < DRAW_INTERVAL_MS) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+      lastDrawRef.current = t;
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       if (canvas.width !== rect.width * dpr) canvas.width = rect.width * dpr;
@@ -422,12 +443,18 @@ function Waveform({
 // nothing to hatch in a 18px strip).
 function Sparkline({ series, color, height, ariaLabel }: { series: RollingSeries; color: string; height: number; ariaLabel: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastDrawRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let raf: number;
-    const draw = () => {
+    const draw = (t: number) => {
+      if (t - lastDrawRef.current < DRAW_INTERVAL_MS) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+      lastDrawRef.current = t;
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       if (canvas.width !== rect.width * dpr) canvas.width = rect.width * dpr;
