@@ -17,15 +17,15 @@ export function BarsList({ items }: { items: BarsListItem[] }) {
           key={i}
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(70px, 130px) minmax(0, 1fr) 56px",
+            gridTemplateColumns: "minmax(80px, 140px) minmax(0, 1fr) 72px",
             gap: "var(--s3)",
             alignItems: "center",
-            padding: "9px 0",
+            padding: "10px 0",
           }}
         >
           <span
             style={{
-              fontSize: 12.5,
+              fontSize: 15,
               color: "var(--body)",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -54,7 +54,7 @@ export function BarsList({ items }: { items: BarsListItem[] }) {
               }}
             />
           </span>
-          <span style={{ textAlign: "right", fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>{item.value}</span>
+          <span style={{ textAlign: "right", fontSize: 15, fontVariantNumeric: "tabular-nums" }}>{item.value}</span>
         </div>
       ))}
     </div>

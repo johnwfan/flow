@@ -3,12 +3,10 @@ import { NotEnoughData } from "@/components/ui/NotEnoughData";
 import { PlotGrid } from "@/components/ui/PlotGrid";
 import { formatShortDate } from "@/lib/format";
 import { MIN_SESSIONS_FOR_PATTERN } from "@/lib/patterns";
-import { WrittenForYou } from "./WrittenForYou";
+import { settledPoints, type SettledPoint } from "./presentation";
 
 const HEIGHT = 120;
 const VIEW_WIDTH = 600;
-
-type SettledPoint = { sessionId: string; date: string; settleSeconds: number };
 
 function SettleSvg({ points }: { points: SettledPoint[] }) {
   const minutes = points.map((p) => p.settleSeconds / 60);
@@ -53,29 +51,18 @@ function headline(points: SettledPoint[]): { value: string; note: string } {
   return { value: `${Math.round(lastM)} m`, note: `last session · ${dir} ${Math.round(firstM)} m, ${points.length} sessions ago` };
 }
 
-function settleNote(points: SettledPoint[], sessionCount: number, hasEnough: boolean): string {
-  if (!hasEnough) {
-    return `Not enough settled sessions yet to show a trend -- ${sessionCount} of ${MIN_SESSIONS_FOR_PATTERN} needed.`;
-  }
-  const first = points[0]!.settleSeconds;
-  const last = points[points.length - 1]!.settleSeconds;
-  if (last < first * 0.85) return "You are settling meaningfully faster than you used to. Whatever changed about how you start, it is working.";
-  if (last > first * 1.15) return "Settling has been slower lately -- recent sessions are starting with more warm-up time than before.";
-  return "Time to settle has stayed roughly steady across your recent sessions.";
-}
-
 export function SettleTrendChart({ data, sessionCount }: { data: SettlePoint[]; sessionCount: number }) {
-  const points = data.filter((p): p is SettledPoint => p.settleSeconds !== null);
+  const points = settledPoints(data);
   const hasEnough = points.length >= 2 && sessionCount >= MIN_SESSIONS_FOR_PATTERN;
   const { value, note } = points.length > 0 ? headline(points) : { value: "—", note: "no settled sessions yet" };
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", gap: "var(--s3)", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 24, fontWeight: 500, letterSpacing: "-0.04em", fontVariantNumeric: "tabular-nums" }}>
+        <span style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.04em", fontVariantNumeric: "tabular-nums" }}>
           {value}
         </span>
-        <span style={{ fontSize: 13, color: "var(--body)" }}>{note}</span>
+        <span style={{ fontSize: 15.5, color: "var(--body)" }}>{note}</span>
       </div>
 
       <div style={{ height: HEIGHT, marginTop: "var(--s4)" }}>
@@ -92,7 +79,7 @@ export function SettleTrendChart({ data, sessionCount }: { data: SettlePoint[]; 
             display: "flex",
             justifyContent: "space-between",
             marginTop: 7,
-            fontSize: 10,
+            fontSize: 12,
             color: "var(--mute)",
             fontVariantNumeric: "tabular-nums",
           }}
@@ -102,7 +89,6 @@ export function SettleTrendChart({ data, sessionCount }: { data: SettlePoint[]; 
         </div>
       )}
 
-      <WrittenForYou text={settleNote(points, sessionCount, hasEnough)} />
     </div>
   );
 }

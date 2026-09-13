@@ -1,7 +1,6 @@
 import type { FocusWindow } from "@/types/api";
 import { NotEnoughData } from "@/components/ui/NotEnoughData";
 import { PlotGrid } from "@/components/ui/PlotGrid";
-import { WrittenForYou } from "./WrittenForYou";
 import { MIN_SESSIONS_FOR_PATTERN } from "@/lib/patterns";
 
 const HEIGHT = 150;
@@ -53,24 +52,6 @@ function CurveSvg({ data }: { data: FocusWindow }) {
   );
 }
 
-function focusNote(data: FocusWindow, sessions: number, hasEnough: boolean): string {
-  if (!hasEnough || data.medianMinutes === null) {
-    return `Not enough sessions with a clear drop-off yet -- ${sessions} of ${MIN_SESSIONS_FOR_PATTERN} needed before this trend means anything.`;
-  }
-  const m = data.medianMinutes;
-  // The curve's raw last point can be noisy (very few sessions run that long,
-  // so one still-focused outlier can spike it back up) -- the lowest point
-  // after the median is a more honest "here's the real cost" figure than
-  // whatever the tail happens to land on.
-  const pointsAfterMedian = data.decayCurve.filter((d) => d.minute > m);
-  const worst = pointsAfterMedian.reduce<(typeof pointsAfterMedian)[number] | null>(
-    (min, d) => (min === null || d.pctStillFocused < min.pctStillFocused ? d : min),
-    null,
-  );
-  const tailNote = worst ? ` By minute ${worst.minute}, focus has dropped to ${worst.pctStillFocused}%.` : "";
-  return `Your attention holds about ${m} minute${m === 1 ? "" : "s"} before the first real drop, based on ${sessions} session${sessions === 1 ? "" : "s"}.${tailNote} Consider ending a block a little before that point rather than pushing past it.`;
-}
-
 export function FocusWindowChart({ data, sessionCount }: { data: FocusWindow; sessionCount: number }) {
   const hasEnough = sessionCount >= MIN_SESSIONS_FOR_PATTERN && data.decayCurve.length > 0 && data.medianMinutes !== null;
 
@@ -89,7 +70,7 @@ export function FocusWindowChart({ data, sessionCount }: { data: FocusWindow; se
         >
           {data.medianMinutes ?? "—"}
         </span>
-        <span style={{ fontSize: 18, color: "var(--body)" }}>
+        <span style={{ fontSize: 20, color: "var(--body)" }}>
           {data.medianMinutes !== null ? "minutes, then attention starts to go" : "not enough sessions yet to say"}
         </span>
       </div>
@@ -108,7 +89,7 @@ export function FocusWindowChart({ data, sessionCount }: { data: FocusWindow; se
             display: "flex",
             justifyContent: "space-between",
             marginTop: 7,
-            fontSize: 10,
+            fontSize: 12,
             color: "var(--mute)",
             fontVariantNumeric: "tabular-nums",
           }}
@@ -119,9 +100,7 @@ export function FocusWindowChart({ data, sessionCount }: { data: FocusWindow; se
         </div>
       )}
 
-      <WrittenForYou text={focusNote(data, sessionCount, hasEnough)} />
-
-      <div style={{ marginTop: "var(--s4)", fontSize: 12.5, color: "var(--mute)", lineHeight: 1.55, maxWidth: "62ch" }}>
+      <div style={{ marginTop: "var(--s4)", fontSize: 15, color: "var(--mute)", lineHeight: 1.55, maxWidth: "62ch" }}>
         Measured as time from session start to the first sustained drift, across {sessionCount} session
         {sessionCount === 1 ? "" : "s"} with usable signal.
       </div>

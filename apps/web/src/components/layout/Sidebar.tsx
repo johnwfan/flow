@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { href: "/session", label: "Session" },
   { href: "/dashboard", label: "Sessions" },
   { href: "/insights", label: "Insights" },
-  { href: "/validation", label: "Validation" },
 ] as const;
 
 // Placeholder session count. Real data (from the API) is wired in by

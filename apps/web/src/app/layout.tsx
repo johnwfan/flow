@@ -15,7 +15,7 @@ const instrumentSans = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Flow — camera-based focus and physiology coach",
+  title: "Flow",
   description:
     "Flow reads pulse, breathing, blink rate and gaze off a plain webcam and names the state nothing else measures — eyes on the page, brain gone.",
 };
