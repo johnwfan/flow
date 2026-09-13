@@ -22,6 +22,7 @@ export function RegenerateSessionInsightsButton({ sessionId }: { sessionId: stri
       router.refresh();
     } catch {
       window.alert("Could not regenerate this session's Gemini write-up. Check that the API and Gemini key are working.");
+    } finally {
       setIsRegenerating(false);
     }
   }

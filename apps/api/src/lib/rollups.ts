@@ -108,20 +108,57 @@ export async function listSessionSummaries(pool: Pool, deviceId?: string): Promi
     clauses.push("device_id = $1");
   }
 
-  const sessionResult = await pool.query<{ id: string }>(
-    `SELECT id FROM sessions WHERE ${clauses.join(" AND ")} ORDER BY started_at DESC`,
+  const sessionResult = await pool.query<{
+    id: string;
+    device_id: string;
+    started_at: Date;
+    ended_at: Date | null;
+    duration_s: number | null;
+    narrative: string | null;
+  }>(
+    `SELECT id, device_id, started_at, ended_at, duration_s, narrative
+     FROM sessions WHERE ${clauses.join(" AND ")} ORDER BY started_at DESC`,
     params,
   );
+  const sessionIds = sessionResult.rows.map((s) => s.id);
 
-  // Was a sequential await-in-loop -- one DB round trip per session, in
-  // series, against a remote Tiger Cloud instance. With dozens of sessions
-  // that's dozens of round trips end to end, which is exactly why this
-  // list was slow to load. Promise.all lets pg's pool (default max 10)
-  // run them concurrently instead of one at a time; order is preserved
-  // since Promise.all resolves in input order regardless of completion
-  // order.
-  const results = await Promise.all(sessionResult.rows.map((row) => getSessionSummary(pool, row.id)));
-  return results.filter((s): s is SessionSummary => s !== null);
+  // Was one getSessionSummary() call per session -- two round trips each
+  // (even Promise.all'd, that's still real network latency against a
+  // remote DB, dozens of times over). Batch every session's buckets into
+  // one query instead, group by session_id in JS, and reuse the exact
+  // same toRibbon() derivation this used per-session before.
+  const allBuckets = sessionIds.length
+    ? await pool.query<BucketRow & { session_id: string }>(
+        `SELECT session_id, bucket, avg_pulse_bpm, avg_breathing_rpm, avg_hrv_ms, avg_eda_us, state
+         FROM samples_1min WHERE session_id = ANY($1::uuid[]) ORDER BY session_id, bucket ASC`,
+        [sessionIds],
+      )
+    : { rows: [] };
+
+  const bucketsBySession = new Map<string, BucketRow[]>();
+  for (const row of allBuckets.rows) {
+    const arr = bucketsBySession.get(row.session_id) ?? [];
+    arr.push(row);
+    bucketsBySession.set(row.session_id, arr);
+  }
+
+  return sessionResult.rows.map((session) => {
+    const stateRibbon = toRibbon(bucketsBySession.get(session.id) ?? [], 60);
+    const focusTimeS = stateRibbon
+      .filter((s) => s.state === State.Focused)
+      .reduce((sum, s) => sum + s.durationS, 0);
+
+    return {
+      id: session.id,
+      deviceId: session.device_id,
+      startedAt: session.started_at.toISOString(),
+      endedAt: session.ended_at ? session.ended_at.toISOString() : null,
+      durationS: session.duration_s,
+      narrative: session.narrative,
+      focusTimeS,
+      stateRibbon,
+    };
+  });
 }
 
 export async function getSessionTimeline(pool: Pool, sessionId: string, durationS: number | null): Promise<TimelineBucket[]> {
