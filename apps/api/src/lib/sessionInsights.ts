@@ -192,19 +192,32 @@ export async function computeCrossSessionDistractionPattern(
     deviceId ? [deviceId] : [],
   );
 
+  // Was two sequential round trips per session, in series -- fetch every
+  // session's data concurrently instead (still skipping the contextTimeline
+  // query for sessions with no distraction episodes, same as before); the
+  // byKey aggregation below is a plain synchronous pass over the results
+  // and doesn't care what order sessions finish in.
+  const perSession = await Promise.all(
+    sessionResult.rows.map(async (session) => {
+      const buckets = await pool.query<DistractedBucketRow>(
+        `SELECT bucket, state FROM samples_1min
+         WHERE session_id = $1 AND state = ANY($2::text[])
+         ORDER BY bucket ASC`,
+        [session.id, [State.ZonedOut, State.Spiraling]],
+      );
+      if (buckets.rows.length === 0) return null;
+
+      const episodes = bucketsToEpisodes(buckets.rows);
+      const contextTimeline = await getAppContextTimeline(pool, session.id);
+      return { episodes, contextTimeline };
+    }),
+  );
+
   const byKey = new Map<string, Omit<CrossSessionDistractionPattern, "avgMinutesPerEpisode">>();
 
-  for (const session of sessionResult.rows) {
-    const buckets = await pool.query<DistractedBucketRow>(
-      `SELECT bucket, state FROM samples_1min
-       WHERE session_id = $1 AND state = ANY($2::text[])
-       ORDER BY bucket ASC`,
-      [session.id, [State.ZonedOut, State.Spiraling]],
-    );
-    if (buckets.rows.length === 0) continue;
-
-    const episodes = bucketsToEpisodes(buckets.rows);
-    const contextTimeline = await getAppContextTimeline(pool, session.id);
+  for (const result of perSession) {
+    if (!result) continue;
+    const { episodes, contextTimeline } = result;
 
     for (const episode of episodes) {
       const app = appAt(contextTimeline, episode.startedAt.getTime());
