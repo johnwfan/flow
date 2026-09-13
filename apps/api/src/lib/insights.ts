@@ -18,16 +18,24 @@ export async function computeFocusWindow(pool: Pool, deviceId?: string): Promise
   const { clause, params } = deviceFilter(deviceId);
   const sessions = await pool.query<{ id: string }>(`SELECT id FROM sessions ${clause}`, params);
 
+  // Was a sequential await-in-loop -- one round trip per session, in
+  // series, against a remote DB. Fetch them all concurrently instead (pg's
+  // pool, default max 10, queues the rest safely); the aggregation below
+  // stays a plain synchronous loop over the results.
+  const allBuckets = await Promise.all(
+    sessions.rows.map((session) =>
+      pool.query<{ minute: number; state: string }>(
+        `SELECT extract(epoch FROM (bucket - min(bucket) OVER ())) / 60 AS minute, state
+         FROM samples_1min WHERE session_id = $1 ORDER BY bucket ASC`,
+        [session.id],
+      ),
+    ),
+  );
+
   const dropoffMinutes: number[] = [];
   const minuteBuckets = new Map<number, { total: number; stillFocused: number }>();
 
-  for (const session of sessions.rows) {
-    const buckets = await pool.query<{ minute: number; state: string }>(
-      `SELECT extract(epoch FROM (bucket - min(bucket) OVER ())) / 60 AS minute, state
-       FROM samples_1min WHERE session_id = $1 ORDER BY bucket ASC`,
-      [session.id],
-    );
-
+  for (const buckets of allBuckets) {
     let firstFocusedMinute: number | null = null;
     let dropoffMinute: number | null = null;
     for (const row of buckets.rows) {
@@ -151,17 +159,22 @@ export async function computeSettleTrend(pool: Pool, deviceId?: string): Promise
     params,
   );
 
-  const points: SettlePoint[] = [];
-  for (const session of sessions.rows) {
-    const firstFocused = await pool.query<{ bucket: Date }>(
-      `SELECT bucket FROM samples_1min WHERE session_id = $1 AND state = $2 ORDER BY bucket ASC LIMIT 1`,
-      [session.id, State.Focused],
-    );
-    const bucket = firstFocused.rows[0]?.bucket;
+  // One round trip per session, concurrently rather than in series -- see
+  // the note on listSessionSummaries.
+  const firstFocusedResults = await Promise.all(
+    sessions.rows.map((session) =>
+      pool.query<{ bucket: Date }>(
+        `SELECT bucket FROM samples_1min WHERE session_id = $1 AND state = $2 ORDER BY bucket ASC LIMIT 1`,
+        [session.id, State.Focused],
+      ),
+    ),
+  );
+
+  return sessions.rows.map((session, i) => {
+    const bucket = firstFocusedResults[i]!.rows[0]?.bucket;
     const settleSeconds = bucket ? Math.round((bucket.getTime() - session.started_at.getTime()) / 1000) : null;
-    points.push({ sessionId: session.id, date: session.started_at.toISOString(), settleSeconds });
-  }
-  return points;
+    return { sessionId: session.id, date: session.started_at.toISOString(), settleSeconds };
+  });
 }
 
 export interface BreakQuality {
@@ -182,9 +195,11 @@ export async function computeBreakQuality(pool: Pool, deviceId?: string): Promis
     params,
   );
 
-  let restorative = 0;
-  let depleting = 0;
+  // Pairing pause/resume events is inherently sequential (order matters),
+  // but doesn't touch the DB -- collect the resume pairs first, then fire
+  // their follow-up queries concurrently instead of one at a time.
   const pendingPauseBySession = new Map<string, Date>();
+  const resumePairs: { sessionId: string; ts: Date }[] = [];
 
   for (const row of controlEvents.rows) {
     if (row.payload.action === "pause") {
@@ -193,17 +208,25 @@ export async function computeBreakQuality(pool: Pool, deviceId?: string): Promis
     }
     if (row.payload.action !== "resume" || !pendingPauseBySession.has(row.session_id)) continue;
 
-    const sessionId = row.session_id;
-    const ts = row.ts;
-    pendingPauseBySession.delete(sessionId);
+    pendingPauseBySession.delete(row.session_id);
+    resumePairs.push({ sessionId: row.session_id, ts: row.ts });
+  }
 
-    const focusedAfter = await pool.query<{ bucket: Date }>(
-      `SELECT bucket FROM samples_1min
-       WHERE session_id = $1 AND state = $2 AND bucket >= $3::timestamptz AND bucket <= $3::timestamptz + interval '3 minutes'
-       LIMIT 1`,
-      [sessionId, State.Focused, ts],
-    );
-    if (focusedAfter.rows.length > 0) restorative += 1;
+  const focusedAfterResults = await Promise.all(
+    resumePairs.map((pair) =>
+      pool.query<{ bucket: Date }>(
+        `SELECT bucket FROM samples_1min
+         WHERE session_id = $1 AND state = $2 AND bucket >= $3::timestamptz AND bucket <= $3::timestamptz + interval '3 minutes'
+         LIMIT 1`,
+        [pair.sessionId, State.Focused, pair.ts],
+      ),
+    ),
+  );
+
+  let restorative = 0;
+  let depleting = 0;
+  for (const result of focusedAfterResults) {
+    if (result.rows.length > 0) restorative += 1;
     else depleting += 1;
   }
 
@@ -229,24 +252,28 @@ export async function computeInterventionEfficacy(pool: Pool, deviceId?: string)
     params,
   );
 
-  const points: InterventionEfficacyPoint[] = [];
-  for (const alert of alerts.rows) {
-    const before = await pool.query<{ avg: string | null }>(
-      `SELECT avg(breathing_rpm) FROM samples WHERE session_id = $1 AND ts BETWEEN $2::timestamptz - interval '2 minutes' AND $2::timestamptz`,
-      [alert.session_id, alert.ts],
-    );
-    const after = await pool.query<{ avg: string | null }>(
-      `SELECT avg(breathing_rpm) FROM samples WHERE session_id = $1 AND ts BETWEEN $2::timestamptz AND $2::timestamptz + interval '2 minutes'`,
-      [alert.session_id, alert.ts],
-    );
+  // Two round trips per alert, all independent of each other -- run the
+  // whole set concurrently instead of two-at-a-time in series.
+  return Promise.all(
+    alerts.rows.map(async (alert) => {
+      const [before, after] = await Promise.all([
+        pool.query<{ avg: string | null }>(
+          `SELECT avg(breathing_rpm) FROM samples WHERE session_id = $1 AND ts BETWEEN $2::timestamptz - interval '2 minutes' AND $2::timestamptz`,
+          [alert.session_id, alert.ts],
+        ),
+        pool.query<{ avg: string | null }>(
+          `SELECT avg(breathing_rpm) FROM samples WHERE session_id = $1 AND ts BETWEEN $2::timestamptz AND $2::timestamptz + interval '2 minutes'`,
+          [alert.session_id, alert.ts],
+        ),
+      ]);
 
-    points.push({
-      ts: alert.ts.toISOString(),
-      breathingRpmBefore: before.rows[0]?.avg ? Number(before.rows[0].avg) : null,
-      breathingRpmAfter: after.rows[0]?.avg ? Number(after.rows[0].avg) : null,
-    });
-  }
-  return points;
+      return {
+        ts: alert.ts.toISOString(),
+        breathingRpmBefore: before.rows[0]?.avg ? Number(before.rows[0].avg) : null,
+        breathingRpmAfter: after.rows[0]?.avg ? Number(after.rows[0].avg) : null,
+      };
+    }),
+  );
 }
 
 export interface ValidationResult {

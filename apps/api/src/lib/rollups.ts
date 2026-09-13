@@ -113,12 +113,15 @@ export async function listSessionSummaries(pool: Pool, deviceId?: string): Promi
     params,
   );
 
-  const summaries: SessionSummary[] = [];
-  for (const row of sessionResult.rows) {
-    const summary = await getSessionSummary(pool, row.id);
-    if (summary) summaries.push(summary);
-  }
-  return summaries;
+  // Was a sequential await-in-loop -- one DB round trip per session, in
+  // series, against a remote Tiger Cloud instance. With dozens of sessions
+  // that's dozens of round trips end to end, which is exactly why this
+  // list was slow to load. Promise.all lets pg's pool (default max 10)
+  // run them concurrently instead of one at a time; order is preserved
+  // since Promise.all resolves in input order regardless of completion
+  // order.
+  const results = await Promise.all(sessionResult.rows.map((row) => getSessionSummary(pool, row.id)));
+  return results.filter((s): s is SessionSummary => s !== null);
 }
 
 export async function getSessionTimeline(pool: Pool, sessionId: string, durationS: number | null): Promise<TimelineBucket[]> {
