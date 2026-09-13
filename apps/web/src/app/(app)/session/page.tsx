@@ -35,6 +35,61 @@ const STATE_STROKE: Record<string, string> = {
 };
 const MUTE_STROKE = "oklch(0.54 0 0)";
 
+// ── Reading freshness → color, the way a bedside monitor grays out a
+// trace instead of blanking it the instant a lead hiccups. Below FRESH_MS
+// a reading shows in its full state color; above STALE_MS it's fully
+// muted; in between it's a real perceptual blend (oklch interpolates
+// cleanly since it's just three numbers), not a CSS-opacity fake-out.
+const FRESH_MS = 2000;
+const STALE_MS = 12_000;
+
+// Exponential-smoothing factors per metric (higher = tracks raw value
+// faster / smooths less) and how often the smoothed value is allowed to
+// actually reach React state -- see smoothedRef/uiUpdateAtRef below.
+const PULSE_ALPHA = 0.18;
+const BREATH_ALPHA = 0.1;
+const HRV_ALPHA = 0.12;
+const EDA_ALPHA = 0.15;
+const CONF_ALPHA = 0.25;
+const UI_UPDATE_MS = 450;
+
+function ema(prev: number | null, next: number, alpha: number): number {
+  return prev == null ? next : prev + alpha * (next - prev);
+}
+
+function parseOklch(s: string): [number, number, number] | null {
+  const m = s.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+  if (!m) return null;
+  return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])];
+}
+
+function lerpOklch(a: string, b: string, t: number): string {
+  const pa = parseOklch(a);
+  const pb = parseOklch(b);
+  if (!pa || !pb) return t < 0.5 ? a : b;
+  const l = pa[0] + (pb[0] - pa[0]) * t;
+  const c = pa[1] + (pb[1] - pa[1]) * t;
+  let dh = pb[2] - pa[2];
+  if (dh > 180) dh -= 360;
+  if (dh < -180) dh += 360;
+  const h = (pa[2] + dh * t + 360) % 360;
+  return `oklch(${l.toFixed(3)} ${c.toFixed(3)} ${h.toFixed(1)})`;
+}
+
+/** A literal oklch stroke/text color, faded toward mute as a reading ages. */
+function agedColor(base: string, ageMs: number | null): string {
+  if (ageMs == null) return MUTE_STROKE;
+  if (ageMs <= FRESH_MS) return base;
+  if (ageMs >= STALE_MS) return MUTE_STROKE;
+  return lerpOklch(base, MUTE_STROKE, (ageMs - FRESH_MS) / (STALE_MS - FRESH_MS));
+}
+
+/** oklch(...) -> oklch(... / alpha), for canvas gradient fills. */
+function withAlpha(oklch: string, alpha: number): string {
+  const m = oklch.match(/^oklch\(([^)/]+)\)$/);
+  return m ? `oklch(${m[1]} / ${alpha})` : oklch;
+}
+
 function colorVar(state: string | null, step: "" | "-ink" | "-mid" | "-pale" = ""): string {
   const key = state ? STATE_COLOR[state] : undefined;
   if (!key) return "var(--mute)";
@@ -147,6 +202,37 @@ interface RollingSeries {
 
 const SERIES_LENGTH = 300; // ~15s at 20Hz
 const SPARK_TAIL = 40; // matches the reference prototype's 40-sample sparkline window
+const INTEGRATED_CAMERA_PATTERNS = [/integrated/i, /built.?in/i, /internal/i, /hp wide vision/i, /hp true vision/i];
+const SENSING_CAMERA_PATTERNS = [/hd webcam/i, /brio/i, /logitech/i, /usb/i, /elgato/i];
+
+type PreviewStatus = "idle" | "starting" | "live" | "blocked";
+
+function matchesAny(value: string, patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(value));
+}
+
+function isLikelyIntegratedCamera(device: MediaDeviceInfo | { label: string } | null | undefined): boolean {
+  return !!device?.label && matchesAny(device.label, INTEGRATED_CAMERA_PATTERNS);
+}
+
+function isLikelySensingCamera(device: MediaDeviceInfo | { label: string } | null | undefined): boolean {
+  return !!device?.label && matchesAny(device.label, SENSING_CAMERA_PATTERNS);
+}
+
+function choosePreviewDevice(devices: MediaDeviceInfo[], protectSensingCamera: boolean): MediaDeviceInfo | null {
+  const videoInputs = devices.filter((device) => device.kind === "videoinput");
+  if (videoInputs.length === 0) return null;
+
+  const integrated = videoInputs.find(isLikelyIntegratedCamera);
+  if (integrated) return integrated;
+
+  if (protectSensingCamera) {
+    const nonSensing = videoInputs.find((device) => device.label && !isLikelySensingCamera(device));
+    if (nonSensing) return nonSensing;
+  }
+
+  return videoInputs[0] ?? null;
+}
 
 function useRollingSeries(length: number = SERIES_LENGTH): [RollingSeries, (v: number | null) => void] {
   const ref = useRef<RollingSeries>({ values: [] });
@@ -173,6 +259,26 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
+// Turns a polyline into a visually smooth curve by running the path
+// through the midpoint of each pair of points (a standard trick for
+// smoothing without an external charting library). Combined with the
+// EMA-smoothed values already being pushed into the series (see the
+// sample handler), this is what makes the plot read as a calm monitor
+// trace instead of raw per-frame sensor noise.
+function tracePath(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+  if (pts.length < 3) {
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    return;
+  }
+  for (let i = 1; i < pts.length - 1; i++) {
+    const midX = (pts[i].x + pts[i + 1].x) / 2;
+    const midY = (pts[i].y + pts[i + 1].y) / 2;
+    ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last.x, last.y);
+}
+
 function Waveform({
   series,
   color,
@@ -187,6 +293,9 @@ function Waveform({
   ariaLabel: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Eased vertical range -- a single outlier sample shouldn't make the
+  // whole plot visibly jump. Persists across frames via ref.
+  const scaleRef = useRef<{ lo: number; hi: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -219,33 +328,60 @@ function Waveform({
         raf = requestAnimationFrame(draw);
         return;
       }
-      const min = Math.min(...known);
-      const max = Math.max(...known);
-      const pad = (max - min) * 0.2 || 1;
-      const lo = min - pad;
-      const hi = max + pad;
+      const targetMin = Math.min(...known);
+      const targetMax = Math.max(...known);
+      const targetPad = (targetMax - targetMin) * 0.25 || 1;
+      const targetLo = targetMin - targetPad;
+      const targetHi = targetMax + targetPad;
+      if (!scaleRef.current) scaleRef.current = { lo: targetLo, hi: targetHi };
+      const sc = scaleRef.current;
+      sc.lo += (targetLo - sc.lo) * 0.06;
+      sc.hi += (targetHi - sc.hi) * 0.06;
+      const lo = sc.lo;
+      const hi = sc.hi;
+
       const stepX = w / (SERIES_LENGTH - 1);
       const offset = SERIES_LENGTH - series.values.length;
 
-      ctx.beginPath();
-      let started = false;
+      // Break the series into contiguous runs (nulls end a run) so gaps
+      // stay honest gaps rather than a line drawn straight through them.
+      const segments: { x: number; y: number }[][] = [];
+      let current: { x: number; y: number }[] = [];
       series.values.forEach((v, i) => {
         if (v == null) {
-          started = false;
+          if (current.length) segments.push(current);
+          current = [];
           return;
         }
-        const x = (offset + i) * stepX;
-        const y = h - ((v - lo) / (hi - lo)) * h;
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
+        current.push({ x: (offset + i) * stepX, y: h - ((v - lo) / (hi - lo)) * h });
       });
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      if (current.length) segments.push(current);
+
+      segments.forEach((pts) => {
+        if (pts.length < 2) return;
+
+        // Soft gradient fill under the curve, like a bedside monitor trace.
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, withAlpha(color, 0.22));
+        grad.addColorStop(1, withAlpha(color, 0));
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, h);
+        ctx.lineTo(pts[0].x, pts[0].y);
+        tracePath(ctx, pts);
+        ctx.lineTo(pts[pts.length - 1].x, h);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        tracePath(ctx, pts);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.stroke();
+      });
 
       raf = requestAnimationFrame(draw);
     };
@@ -301,30 +437,25 @@ function Sparkline({ series, color, height, ariaLabel }: { series: RollingSeries
       const hi = max + pad;
       const stepX = tail.length > 1 ? w / (tail.length - 1) : w;
 
-      ctx.beginPath();
-      let started = false;
+      const pts: { x: number; y: number }[] = [];
+      tail.forEach((v, i) => {
+        if (v == null) return;
+        pts.push({ x: i * stepX, y: h - 2 - ((v - lo) / (hi - lo)) * (h - 4) });
+      });
       let lastX = 0;
       let lastY = 0;
-      tail.forEach((v, i) => {
-        if (v == null) {
-          started = false;
-          return;
-        }
-        const x = i * stepX;
-        const y = h - 2 - ((v - lo) / (hi - lo)) * (h - 4);
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-        lastX = x;
-        lastY = y;
-      });
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.4;
-      ctx.lineJoin = "round";
-      ctx.stroke();
+      if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        tracePath(ctx, pts);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.stroke();
+        lastX = pts[pts.length - 1].x;
+        lastY = pts[pts.length - 1].y;
+      }
       ctx.beginPath();
       ctx.arc(lastX, lastY, 1.8, 0, Math.PI * 2);
       ctx.fillStyle = color;
@@ -405,13 +536,18 @@ export default function SessionPage() {
   const [validationHint, setValidationHint] = useState<string | null>(null);
   const [cameraRefused, setCameraRefused] = useState<string | null>(null);
   const [previewOn, setPreviewOn] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState<PreviewStatus>("idle");
+  const [previewMessage, setPreviewMessage] = useState("preview off");
+  const [previewDeviceLabel, setPreviewDeviceLabel] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
 
   const [lastPacketAt, setLastPacketAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    // Faster than the old 1000ms so the freshness-based color fade (see
+    // agedColor) reads as a smooth fade rather than a visible step.
+    const id = setInterval(() => setNow(Date.now()), 400);
     return () => clearInterval(id);
   }, []);
 
@@ -420,6 +556,18 @@ export default function SessionPage() {
   const [hrvSeries, pushHrv] = useRollingSeries();
   const [blinkSeries, pushBlink] = useRollingSeries();
   const [edaSeries, pushEda] = useRollingSeries();
+
+  // Real per-frame samples arrive noisy and at 20-30Hz -- pushing every
+  // one straight into React state made the on-screen numbers flash. A
+  // real monitor instead shows a damped reading that holds its last
+  // known value between updates. smoothedRef holds the exponentially-
+  // smoothed running value per metric (persists across nulls); lastGoodRef
+  // timestamps the last real (non-null) sample per metric, driving the
+  // color fade; uiUpdateAtRef throttles how often that smoothed value
+  // actually reaches React state / the canvas series.
+  const smoothedRef = useRef({ pulse: null as number | null, breathing: null as number | null, hrv: null as number | null, eda: null as number | null, conf: null as number | null });
+  const lastGoodRef = useRef({ pulse: null as number | null, breathing: null as number | null, hrv: null as number | null, eda: null as number | null });
+  const uiUpdateAtRef = useRef(0);
 
   // Dev/demo state preview -- see the block comment above PreviewKey.
   const [previewState, setPreviewState] = useState<PreviewKey | null>(null);
@@ -446,21 +594,50 @@ export default function SessionPage() {
         const msg = JSON.parse(ev.data) as WsMessage;
         setLastPacketAt(Date.now());
         switch (msg.kind) {
-          case "sample":
-            setEda(msg.eda_us);
-            pushEda(msg.eda_us);
+          case "sample": {
+            const t = Date.now();
+            const sm = smoothedRef.current;
+            if (msg.eda_us != null) {
+              sm.eda = ema(sm.eda, msg.eda_us, EDA_ALPHA);
+              lastGoodRef.current.eda = t;
+            }
+            pushEda(sm.eda);
             if (!previewStateRef.current) {
-              setPulse(msg.pulse_bpm);
-              setBreathing(msg.breathing_rpm);
-              setHrv(msg.hrv_ms);
-              setConf(msg.conf);
-              setBlinkDetected(msg.blink);
-              pushPulse(msg.pulse_bpm);
-              pushBreath(msg.breathing_rpm);
-              pushHrv(msg.hrv_ms);
+              if (msg.pulse_bpm != null) {
+                sm.pulse = ema(sm.pulse, msg.pulse_bpm, PULSE_ALPHA);
+                lastGoodRef.current.pulse = t;
+              }
+              if (msg.breathing_rpm != null) {
+                sm.breathing = ema(sm.breathing, msg.breathing_rpm, BREATH_ALPHA);
+                lastGoodRef.current.breathing = t;
+              }
+              if (msg.hrv_ms != null) {
+                sm.hrv = ema(sm.hrv, msg.hrv_ms, HRV_ALPHA);
+                lastGoodRef.current.hrv = t;
+              }
+              if (msg.conf != null) sm.conf = ema(sm.conf, msg.conf, CONF_ALPHA);
+              pushPulse(sm.pulse);
+              pushBreath(sm.breathing);
+              pushHrv(sm.hrv);
               pushBlink(msg.blink === DetectionStatus.Detected ? 1 : msg.blink === DetectionStatus.NotDetected ? 0 : null);
+
+              // Medical-monitor-style readout: push the smoothed values to
+              // React state (and thus the screen) a few times a second,
+              // holding the last known good reading between updates and
+              // through brief nulls, instead of flashing every raw 20-30Hz
+              // sample straight to the numbers.
+              if (t - uiUpdateAtRef.current >= UI_UPDATE_MS) {
+                uiUpdateAtRef.current = t;
+                setEda(sm.eda);
+                setPulse(sm.pulse);
+                setBreathing(sm.breathing);
+                setHrv(sm.hrv);
+                setConf(sm.conf);
+                setBlinkDetected(msg.blink);
+              }
             }
             break;
+          }
           case "state":
             if (!previewStateRef.current) {
               setState({ state: msg.state, reasons: msg.reasons, confidence: msg.confidence });
@@ -622,41 +799,128 @@ export default function SessionPage() {
       setPhase("warmup");
       setCameraRefused(null);
       setValidationHint(null);
+      // Fresh session -- don't hold over the last session's readings; a
+      // brand new session showing an old heart rate would be exactly the
+      // kind of "pretending to have data" the hold-last-good display is
+      // meant to avoid.
+      smoothedRef.current = { pulse: null, breathing: null, hrv: null, eda: null, conf: null };
+      lastGoodRef.current = { pulse: null, breathing: null, hrv: null, eda: null };
+      uiUpdateAtRef.current = 0;
+      setPulse(null);
+      setBreathing(null);
+      setHrv(null);
+      setEda(null);
+      setConf(null);
+      void startPreview({ protectSensingCamera: true });
     } else if (action === "end") {
       setPhase("ended");
       setSessionId(null);
       setState(null);
       setAlert(null);
       setCameraRefused(null);
+      stopPreview();
     } else {
       setPhase(action === "pause" ? "paused" : "active");
     }
   }
 
-  // Camera preview thumbnail -- a SEPARATE browser-side capture from the
-  // agent's own sensing camera. Off by default and manually toggled: on
-  // hardware that only supports one consumer at a time, running both at
-  // once can make the agent's real capture fail (see PRD risk notes).
-  async function togglePreview() {
-    if (previewOn) {
-      previewStreamRef.current?.getTracks().forEach((t) => t.stop());
-      previewStreamRef.current = null;
-      setPreviewOn(false);
+  function stopPreview() {
+    previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+    previewStreamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setPreviewOn(false);
+    setPreviewStatus("idle");
+    setPreviewMessage("preview off");
+    setPreviewDeviceLabel(null);
+  }
+
+  async function getVideoInputs(): Promise<MediaDeviceInfo[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((device) => device.kind === "videoinput");
+  }
+
+  async function openPreviewStream(device: MediaDeviceInfo | null): Promise<MediaStream> {
+    const video =
+      device?.deviceId
+        ? { deviceId: { exact: device.deviceId }, width: { ideal: 640 }, height: { ideal: 360 } }
+        : { facingMode: "user", width: { ideal: 640 }, height: { ideal: 360 } };
+    return navigator.mediaDevices.getUserMedia({ video, audio: false });
+  }
+
+  // Camera preview thumbnail -- separate from SmartSpectra. During live
+  // sensing, prefer the integrated webcam so the HD Webcam stays dedicated
+  // to the agent; if only the sensing-looking camera is available, hold the
+  // preview off instead of stealing the signal.
+  async function startPreview(opts: { protectSensingCamera: boolean }) {
+    if (previewOn || previewStatus === "starting") return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setPreviewStatus("blocked");
+      setPreviewMessage("camera preview unavailable");
       return;
     }
+
+    setPreviewStatus("starting");
+    setPreviewMessage("choosing camera...");
+
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      let devices = await getVideoInputs();
+      let choice = choosePreviewDevice(devices, opts.protectSensingCamera);
+      stream = await openPreviewStream(choice);
+
+      // Labels often appear only after permission is granted. Once they do,
+      // switch to the integrated webcam if the first stream grabbed the same
+      // external camera the agent is likely using.
+      devices = await getVideoInputs();
+      const integrated = devices.find(isLikelyIntegratedCamera);
+      const selectedId = stream.getVideoTracks()[0]?.getSettings().deviceId;
+      let selectedLabel = stream.getVideoTracks()[0]?.label || choice?.label || "camera";
+
+      if (opts.protectSensingCamera && integrated?.deviceId && selectedId !== integrated.deviceId) {
+        stream.getTracks().forEach((track) => track.stop());
+        choice = integrated;
+        stream = await openPreviewStream(integrated);
+        selectedLabel = stream.getVideoTracks()[0]?.label || integrated.label;
+      }
+
+      if (opts.protectSensingCamera && isLikelySensingCamera({ label: selectedLabel }) && !isLikelyIntegratedCamera({ label: selectedLabel })) {
+        stream.getTracks().forEach((track) => track.stop());
+        setPreviewStatus("blocked");
+        setPreviewMessage("preview held to protect sensing camera");
+        return;
+      }
+
       previewStreamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
+      setPreviewDeviceLabel(selectedLabel);
+      setPreviewMessage(isLikelyIntegratedCamera({ label: selectedLabel }) ? "showing integrated webcam" : "camera preview live");
+      setPreviewStatus("live");
       setPreviewOn(true);
     } catch {
-      // Permission denied or no camera -- thumbnail just stays a placeholder.
+      stream?.getTracks().forEach((track) => track.stop());
+      setPreviewStatus("blocked");
+      setPreviewMessage("camera preview blocked");
     }
+  }
+
+  function togglePreview() {
+    if (previewOn) {
+      stopPreview();
+      return;
+    }
+    void startPreview({ protectSensingCamera: isRunning });
   }
 
   useEffect(() => {
     return () => previewStreamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
+
+  useEffect(() => {
+    if (previewOn && videoRef.current && previewStreamRef.current) {
+      videoRef.current.srcObject = previewStreamRef.current;
+    }
+  }, [previewOn]);
 
   const currentColor = colorVar(state?.state ?? null);
   const isRunning = phase === "warmup" || phase === "active" || phase === "paused";
@@ -675,6 +939,16 @@ export default function SessionPage() {
 
   const packetAgeS = lastPacketAt != null ? Math.max(0, Math.round((now - lastPacketAt) / 1000)) : null;
   const streaming = packetAgeS != null && packetAgeS < 5;
+
+  // Freshness-faded colors for the pulse/breathing readouts and plots --
+  // full state color right after a real reading, easing to mute the
+  // longer it's been held. Preview mode has no real "staleness" concept
+  // (it's synthetic data on a timer), so it always shows full color.
+  const stateStroke = strokeFor(state?.state ?? null);
+  const pulseAgeMs = lastGoodRef.current.pulse != null ? now - lastGoodRef.current.pulse : null;
+  const breathingAgeMs = lastGoodRef.current.breathing != null ? now - lastGoodRef.current.breathing : null;
+  const pulseColor = isPreviewing ? stateStroke : agedColor(stateStroke, pulseAgeMs);
+  const breathingColor = isPreviewing ? stateStroke : agedColor(stateStroke, breathingAgeMs);
 
   const effectiveAlert =
     alert ?? (previewAlertOn ? { ...DEMO_ALERT[state?.state === "spiraling" ? "spiral" : "zone_out"], ts: Date.now() } : null);
@@ -886,7 +1160,7 @@ export default function SessionPage() {
                 </div>
                 <Waveform
                   series={pulseSeries}
-                  color={strokeFor(state?.state ?? null)}
+                  color={pulseColor}
                   height={160}
                   lost={isLost}
                   ariaLabel={`Pulse waveform, currently ${pulse != null ? Math.round(pulse) : "unknown"} beats per minute, state ${state?.state ?? "unknown"}`}
@@ -900,7 +1174,7 @@ export default function SessionPage() {
                 </div>
                 <Waveform
                   series={breathSeries}
-                  color={strokeFor(state?.state ?? null)}
+                  color={breathingColor}
                   height={96}
                   lost={isLost}
                   ariaLabel={`Breathing waveform, currently ${breathing != null ? breathing.toFixed(1) : "unknown"} breaths per minute`}
@@ -942,14 +1216,14 @@ export default function SessionPage() {
             <div className={styles.rail}>
               <div className={styles.railLabel}>Right now</div>
               <div className={styles.heroRow}>
-                <span className={`${styles.heroNum} ${styles.num}`} style={{ color: currentColor }}>
+                <span className={`${styles.heroNum} ${styles.num}`} style={{ color: pulseColor, transition: "color 400ms linear" }}>
                   {pulse != null ? Math.round(pulse) : "—"}
                 </span>
                 <span className={styles.heroUnit}>bpm</span>
               </div>
               <Sparkline
                 series={pulseSeries}
-                color={strokeFor(state?.state ?? null)}
+                color={pulseColor}
                 height={26}
                 ariaLabel="Heart rate over the last forty samples"
               />
@@ -960,24 +1234,29 @@ export default function SessionPage() {
               <div style={{ marginTop: 20 }}>
                 <div className={styles.metricRow}>
                   <span className={styles.metricLabel}>Variability</span>
-                  <Sparkline series={hrvSeries} color="var(--mute)" height={18} ariaLabel="Heart rate variability trend" />
+                  <Sparkline series={hrvSeries} color={MUTE_STROKE} height={18} ariaLabel="Heart rate variability trend" />
                   <span className={`${styles.metricValue} ${styles.num}`}>{hrv != null ? Math.round(hrv) : "—"} ms</span>
                 </div>
                 <div className={styles.metricRow}>
                   <span className={styles.metricLabel}>Breathing</span>
-                  <Sparkline series={breathSeries} color="var(--mute)" height={18} ariaLabel="Breathing rate trend" />
-                  <span className={`${styles.metricValue} ${styles.num}`}>{breathing != null ? breathing.toFixed(1) : "—"} /min</span>
+                  <Sparkline series={breathSeries} color={MUTE_STROKE} height={18} ariaLabel="Breathing rate trend" />
+                  <span
+                    className={`${styles.metricValue} ${styles.num}`}
+                    style={{ color: breathingColor, transition: "color 400ms linear" }}
+                  >
+                    {breathing != null ? breathing.toFixed(1) : "—"} /min
+                  </span>
                 </div>
                 <div className={styles.metricRow}>
                   <span className={styles.metricLabel}>Blinks</span>
-                  <Sparkline series={blinkSeries} color="var(--mute)" height={18} ariaLabel="Blink detection trend" />
+                  <Sparkline series={blinkSeries} color={MUTE_STROKE} height={18} ariaLabel="Blink detection trend" />
                   <span className={`${styles.metricValue} ${styles.num}`}>
                     {blinkDetected === DetectionStatus.Detected ? "detected" : blinkDetected === DetectionStatus.NotDetected ? "quiet" : "—"}
                   </span>
                 </div>
                 <div className={styles.metricRow}>
                   <span className={styles.metricLabel}>EDA</span>
-                  <Sparkline series={edaSeries} color="var(--mute)" height={18} ariaLabel="Electrodermal activity trend" />
+                  <Sparkline series={edaSeries} color={MUTE_STROKE} height={18} ariaLabel="Electrodermal activity trend" />
                   <span className={`${styles.metricValue} ${styles.num}`}>{eda != null ? eda.toFixed(2) : "—"} µS</span>
                 </div>
               </div>
@@ -1000,14 +1279,28 @@ export default function SessionPage() {
                   {previewOn ? (
                     <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
-                    <span style={{ fontSize: 10.5, color: "var(--mute)" }}>preview off</span>
+                    <span style={{ fontSize: 10.5, color: "var(--mute)" }}>
+                      {previewStatus === "starting" ? "camera starting..." : previewMessage}
+                    </span>
                   )}
                 </div>
-                <button className={`${styles.btn} ${styles.btnQuiet}`} style={{ fontSize: 11.5, padding: "4px 10px" }} onClick={togglePreview}>
-                  {previewOn ? "Stop preview" : "Preview camera"}
+                <button
+                  className={`${styles.btn} ${styles.btnQuiet}`}
+                  style={{ fontSize: 11.5, padding: "4px 10px" }}
+                  onClick={togglePreview}
+                  disabled={previewStatus === "starting"}
+                >
+                  {previewOn ? "Stop camera" : previewStatus === "starting" ? "Starting..." : "Show camera"}
                 </button>
-                <div style={{ fontSize: 10.5, color: "var(--mute)", marginTop: 6, maxWidth: 160 }}>
-                  Stays on this machine. Separate from sensing — may conflict on some webcams.
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    color: previewStatus === "blocked" ? "var(--spiral-ink)" : "var(--mute)",
+                    marginTop: 6,
+                    maxWidth: 160,
+                  }}
+                >
+                  {previewDeviceLabel ?? previewMessage}
                 </div>
                 {validationHint && (
                   <div style={{ fontSize: 11, color: "var(--spiral-ink)", marginTop: 8, maxWidth: 160 }}>⚠ {validationHint}</div>
