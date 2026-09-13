@@ -11,3 +11,14 @@
   max-width: 1240px;
   margin: 0 auto;
 }
+
+@media (max-width: 720px) {
+  .shell {
+    display: block;
+  }
+
+  .main {
+    max-width: none;
+    padding: 0 20px 80px;
+  }
+}

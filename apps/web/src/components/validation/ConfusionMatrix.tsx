@@ -23,11 +23,11 @@ function actualColumns(matrix: ValidationResult["confusionMatrix"]): string[] {
 function Stat({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div>
-      <div style={{ fontSize: 11.5, color: "var(--mute)" }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: "-0.04em", fontVariantNumeric: "tabular-nums", marginTop: 5 }}>
+      <div style={{ fontSize: 13, color: "var(--mute)" }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 500, letterSpacing: "-0.04em", fontVariantNumeric: "tabular-nums", marginTop: 5 }}>
         {value}
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--mute)", marginTop: 4 }}>{note}</div>
+      <div style={{ fontSize: 13, color: "var(--mute)", marginTop: 4 }}>{note}</div>
     </div>
   );
 }
@@ -51,12 +51,12 @@ function ValidationStats({ data }: { data: ValidationResult }) {
   );
 }
 
-export function ConfusionMatrix({ data }: { data: ValidationResult }) {
+export function ConfusionMatrix({ data, showStats = true }: { data: ValidationResult; showStats?: boolean }) {
   if (data.n < MIN_PROBES_FOR_VALIDATION) {
     return (
       <div>
         <NotEnoughData height={280} have={data.n} need={MIN_PROBES_FOR_VALIDATION} unit="check-ins" />
-        <ValidationStats data={data} />
+        {showStats && <ValidationStats data={data} />}
       </div>
     );
   }
@@ -64,10 +64,11 @@ export function ConfusionMatrix({ data }: { data: ValidationResult }) {
   const columns = actualColumns(data.confusionMatrix);
   const maxAgreement = Math.max(1, ...PREDICTED_STATES.map((p) => data.confusionMatrix[p]?.[p] ?? 0));
   const gridCols = `120px repeat(${columns.length}, minmax(0, 1fr))`;
+  const matrixWidth = Math.max(520, 120 + columns.length * 104);
 
   return (
     <div>
-      <div style={{ maxWidth: 520 }}>
+      <div style={{ width: matrixWidth }}>
         <div
           style={{
             display: "grid",
@@ -79,7 +80,7 @@ export function ConfusionMatrix({ data }: { data: ValidationResult }) {
         >
           <span />
           {columns.map((c) => (
-            <span key={c} style={{ fontSize: 12.5, color: "var(--body)", textAlign: "center" }}>
+            <span key={c} style={{ fontSize: 14, color: "var(--body)", textAlign: "center" }}>
               you said {c === "other" ? "other" : stateLabel(c).toLowerCase()}
             </span>
           ))}
@@ -96,7 +97,7 @@ export function ConfusionMatrix({ data }: { data: ValidationResult }) {
               alignItems: "stretch",
             }}
           >
-            <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--body)", alignSelf: "center" }}>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--body)", alignSelf: "center" }}>
               {predicted}
             </span>
             {columns.map((actual) => {
@@ -114,7 +115,7 @@ export function ConfusionMatrix({ data }: { data: ValidationResult }) {
                     justifyContent: "center",
                     height: 84,
                     borderRadius: "var(--r-sm)",
-                    fontSize: 23,
+                    fontSize: 24,
                     fontWeight: 500,
                     fontVariantNumeric: "tabular-nums",
                     background,
@@ -129,7 +130,7 @@ export function ConfusionMatrix({ data }: { data: ValidationResult }) {
         ))}
       </div>
 
-      <ValidationStats data={data} />
+      {showStats && <ValidationStats data={data} />}
     </div>
   );
 }

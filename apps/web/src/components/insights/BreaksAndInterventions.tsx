@@ -2,10 +2,10 @@ import type { CSSProperties } from "react";
 import type { BreakQuality, InterventionEfficacyPoint } from "@/types/api";
 import { formatDate } from "@/lib/format";
 
-const labelStyle: CSSProperties = { fontSize: 11.5, color: "var(--mute)", marginBottom: "var(--s3)" };
+const labelStyle: CSSProperties = { fontSize: 14, color: "var(--mute)", marginBottom: "var(--s3)" };
 const captionStyle: CSSProperties = {
   marginTop: "var(--s3)",
-  fontSize: 12.5,
+  fontSize: 15,
   color: "var(--body)",
   lineHeight: 1.55,
   maxWidth: "40ch",
@@ -22,8 +22,8 @@ function BreakRow({ color, label, value }: { color: string; label: string; value
   return (
     <div style={rowStyle}>
       <span style={{ width: 7, height: 7, borderRadius: 2.5, background: color, flex: "none" }} />
-      <span style={{ flex: 1, fontSize: 13, color: "var(--ink)" }}>{label}</span>
-      <span style={{ fontSize: 13, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+      <span style={{ flex: 1, fontSize: 15, color: "var(--ink)" }}>{label}</span>
+      <span style={{ fontSize: 15, fontVariantNumeric: "tabular-nums" }}>{value}</span>
     </div>
   );
 }
@@ -31,8 +31,8 @@ function BreakRow({ color, label, value }: { color: string; label: string; value
 function EfficacyRow({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ padding: "11px 0", borderTop: "1px solid var(--line-soft)" }}>
-      <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--mute)" }}>{label}</div>
-      <div style={{ marginTop: 5, fontSize: 17, fontWeight: 500, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--mute)" }}>{label}</div>
+      <div style={{ marginTop: 5, fontSize: 19, fontWeight: 500, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>
         {value}
       </div>
     </div>
@@ -61,7 +61,7 @@ export function BreaksAndInterventions({
       <div>
         <div style={labelStyle}>Break quality</div>
         {totalBreaks === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--mute)" }}>No pause/resume breaks recorded yet.</p>
+          <p style={{ fontSize: 15, color: "var(--mute)" }}>No pause/resume breaks recorded yet.</p>
         ) : (
           <>
             <BreakRow color="var(--break)" label="Restorative" value={`${breakQuality.restorative} of ${totalBreaks}`} />
@@ -76,7 +76,7 @@ export function BreaksAndInterventions({
       <div>
         <div style={labelStyle}>Breathing loop, before &rarr; after</div>
         {validEfficacy.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--mute)" }}>No interventions recorded yet.</p>
+          <p style={{ fontSize: 15, color: "var(--mute)" }}>No interventions recorded yet.</p>
         ) : (
           <>
             <EfficacyRow

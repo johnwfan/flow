@@ -1,69 +1,48 @@
 /* ---- Hero ---- */
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: var(--s8);
+  grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+  gap: clamp(38px, 4.4vw, 68px);
   align-items: center;
-  padding: var(--s8) 0 var(--s9);
+  min-height: calc(100svh - var(--marketing-nav-height));
+  padding: clamp(54px, 7vh, 82px) 0 clamp(58px, 8vh, 92px);
 }
-@media (max-width: 980px) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s2);
-  padding: 7px 14px 7px 10px;
-  border-radius: var(--r-pill);
-  background: var(--raise);
-  box-shadow: 0 0 0 1px var(--line);
-}
-.badgeDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--deep);
-  animation: hero-breathe 2.6s var(--ease) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .badgeDot {
-    animation: none;
-  }
-}
-@keyframes hero-breathe {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-.badgeText {
-  font-size: 12.5px;
-  color: var(--body);
-  white-space: nowrap;
+.heroCopy {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
 }
 .h1 {
-  margin: var(--s5) 0 0;
-  font-size: clamp(44px, 5vw, 64px);
-  line-height: 1;
-  letter-spacing: -0.042em;
+  margin: 0;
+  font-size: clamp(56px, 5vw, 72px);
+  line-height: 0.95;
+  letter-spacing: -0.052em;
   font-weight: 500;
-  max-width: 13ch;
-  text-wrap: pretty;
+  animation: flow-in var(--dur-3) var(--ease) both;
+}
+.headlineLine {
+  display: block;
+  white-space: nowrap;
 }
 .lede {
-  margin: var(--s5) 0 0;
+  margin: var(--s6) 0 0;
   font-size: 18px;
   line-height: 1.55;
   color: var(--body);
-  max-width: 46ch;
+  max-width: 44ch;
   text-wrap: pretty;
+  animation: flow-in var(--dur-3) var(--ease) both;
+  animation-delay: 80ms;
 }
 .ctaRow {
   display: flex;
   align-items: center;
-  gap: var(--s3);
+  justify-content: flex-start;
+  gap: var(--s5);
   margin-top: var(--s6);
   flex-wrap: wrap;
+  animation: flow-in var(--dur-3) var(--ease) both;
+  animation-delay: 160ms;
 }
 .primaryCta {
   position: relative;
@@ -113,34 +92,105 @@
   outline-offset: 3px;
 }
 .secondaryCta {
-  padding: 13px 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 15px 4px;
   border: none;
-  border-radius: var(--r-pill);
-  background: var(--raise);
+  background: none;
+  color: var(--body);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  transition: color var(--dur-2) var(--ease);
+}
+.secondaryCta:hover,
+.secondaryCta:focus-visible {
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 500;
-  box-shadow: 0 0 0 1px var(--line);
 }
-.secondaryCta:hover {
-  background: var(--sink);
+.secondaryArrow {
+  display: inline-block;
+  transition: transform var(--dur-2) var(--ease);
 }
-.statsRow {
-  display: flex;
-  gap: var(--s6);
-  margin-top: var(--s7);
-  flex-wrap: wrap;
+.secondaryCta:hover .secondaryArrow,
+.secondaryCta:focus-visible .secondaryArrow {
+  transform: translateX(4px);
 }
-.statValue {
-  font-size: 23px;
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
+.secondaryCta:focus-visible {
+  outline: none;
+  box-shadow: 0 2px 0 0 var(--ink);
 }
-.statLabel {
-  font-size: 11.5px;
-  color: var(--mute);
-  margin-top: 3px;
+
+@media (max-width: 1120px) {
+  .hero {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: var(--s6);
+  }
+
+  .h1 {
+    font-size: clamp(52px, 5.5vw, 62px);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s7);
+    min-height: 0;
+    padding: clamp(68px, 10vw, 96px) 0 var(--s8);
+  }
+
+  .heroCopy {
+    max-width: 680px;
+  }
+
+  .h1 {
+    font-size: clamp(56px, 9vw, 76px);
+  }
+}
+
+@media (max-width: 560px) {
+  .hero {
+    gap: var(--s6);
+    padding: 58px 0 var(--s7);
+  }
+
+  .h1 {
+    max-width: 10ch;
+    font-size: clamp(46px, 14vw, 60px);
+    line-height: 0.96;
+  }
+
+  .headlineLine {
+    display: inline;
+    white-space: normal;
+  }
+
+  .headlineLine + .headlineLine::before {
+    content: " ";
+  }
+
+  .lede {
+    margin-top: var(--s5);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .ctaRow {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--s2);
+    margin-top: var(--s5);
+  }
+
+  .primaryCta {
+    padding: 14px 24px;
+  }
+
+  .secondaryCta {
+    padding: 12px 4px;
+    font-size: 15px;
+  }
 }
 
 /* ---- Closing CTA ---- */

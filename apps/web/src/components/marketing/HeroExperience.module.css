@@ -1,0 +1,646 @@
+.figure {
+  position: relative;
+  min-width: 0;
+  height: clamp(500px, 61vh, 590px);
+  margin: 0;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.composition {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 700px;
+  height: 538px;
+  transform: translateY(-50%);
+}
+
+.surface {
+  position: absolute;
+  inset: 0 18px 18px 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--raise);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0),
+    0 24px 70px oklch(0.22 0 0 / 0.08);
+}
+
+.surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, transparent 58%, oklch(0.96 0.006 258 / 0.5));
+}
+
+.topbar {
+  position: relative;
+  z-index: 1;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--s5);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.sessionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.liveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zoned);
+  animation: hero-status 2.6s var(--ease) 1.2s 2;
+}
+
+.elapsed,
+.since,
+.plotMeta span:last-child,
+.timelineMeta,
+.trend,
+.confidenceHeading strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.elapsed {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.productGrid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 154px;
+  min-height: calc(100% - 60px);
+}
+
+.mainPanel {
+  min-width: 0;
+  padding: var(--s5) var(--s5) var(--s4);
+}
+
+.stateRow {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.stateSwatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 2.5px;
+  background: var(--zoned);
+}
+
+.machineName,
+.evidenceList,
+.interventionMeta {
+  font-family: var(--mono);
+}
+
+.machineName {
+  color: var(--zoned-ink);
+  font-size: 10.5px;
+}
+
+.stateHeadline {
+  margin-top: 9px;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+}
+
+.since {
+  margin-top: 5px;
+  color: var(--mute);
+  font-size: 11px;
+}
+
+.evidence {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: start;
+  margin-top: var(--s4);
+}
+
+.evidenceLabel,
+.railLabel {
+  color: var(--mute);
+  font-size: 10.5px;
+}
+
+.evidenceList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--line-soft);
+  color: var(--body);
+  font-size: 9px;
+}
+
+.evidenceList span {
+  min-width: 0;
+  padding: 6px 7px 5px 0;
+  white-space: nowrap;
+}
+
+.plotBlock {
+  margin-top: 18px;
+}
+
+.plotMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--body);
+  font-size: 11px;
+}
+
+.plotMeta span:last-child {
+  color: var(--mute);
+  font-size: 9.5px;
+}
+
+.pulsePlot {
+  position: relative;
+  height: 124px;
+  overflow: hidden;
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 100% 31px, 25% 100%;
+}
+
+.pulsePlot svg,
+.breathPlot {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.trace {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: hero-trace-draw 1.1s var(--ease) 420ms forwards;
+}
+
+.focusTrace {
+  stroke: var(--deep);
+}
+
+.driftTrace,
+.breathTrace,
+.traceEnd {
+  stroke: var(--zoned);
+}
+
+.driftTrace {
+  animation-delay: 760ms;
+}
+
+.focusFill {
+  fill: var(--deep-pale);
+  opacity: 0.48;
+}
+
+.driftFill {
+  fill: var(--zoned-pale);
+  opacity: 0.72;
+}
+
+.traceEnd {
+  fill: var(--raise);
+  stroke-width: 2;
+}
+
+.shiftMarker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 54.6%;
+  width: 1px;
+  background: var(--zoned-mid);
+}
+
+.shiftLabel {
+  position: absolute;
+  top: 6px;
+  left: calc(54.6% + 7px);
+  color: var(--zoned-ink);
+  font-family: var(--mono);
+  font-size: 8px;
+}
+
+.breathBlock {
+  margin-top: 12px;
+}
+
+.breathPlot {
+  height: 38px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.breathTrace {
+  stroke-width: 1.5;
+  animation-delay: 620ms;
+}
+
+.timeline {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  margin-top: 15px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+}
+
+.deepSegment {
+  background: var(--deep);
+}
+
+.zonedSegment {
+  background:
+    repeating-linear-gradient(0deg, oklch(1 0 0 / 0.5) 0 1px, transparent 1px 4px),
+    var(--zoned);
+}
+
+.breakSegment {
+  background:
+    radial-gradient(oklch(1 0 0 / 0.55) 1px, transparent 1.2px) 0 0 / 6px 6px,
+    var(--break);
+}
+
+.timelineMeta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  color: var(--mute);
+  font-size: 8px;
+}
+
+.readingRail {
+  min-width: 0;
+  padding: var(--s5) 18px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.heroReading {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 5px;
+  color: var(--zoned-ink);
+}
+
+.heroReading > span {
+  font-size: 48px;
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+}
+
+.heroReading small {
+  color: var(--body);
+  font-size: 10px;
+}
+
+.sparkline {
+  width: 100%;
+  height: 28px;
+  margin-top: 8px;
+}
+
+.sparkline path {
+  fill: none;
+  stroke: var(--zoned);
+  stroke-width: 1.5;
+}
+
+.trend {
+  display: block;
+  margin-top: 2px;
+  color: var(--zoned-ink);
+  font-size: 9px;
+}
+
+.metrics {
+  margin-top: 22px;
+}
+
+.metrics > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.metrics span,
+.confidenceHeading span {
+  color: var(--mute);
+  font-size: 9.5px;
+}
+
+.metrics strong,
+.confidenceHeading strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.confidence {
+  margin-top: 18px;
+}
+
+.confidenceHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.confidenceTrack {
+  position: relative;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: var(--r-pill);
+  background: var(--line-soft);
+}
+
+.confidenceTick {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 55%;
+  width: 1px;
+  background: var(--tick);
+}
+
+.confidenceFill {
+  display: block;
+  width: 86%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--zoned);
+}
+
+.intervention {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 326px;
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--raise);
+  box-shadow: var(--shadow-alert);
+  animation: hero-intervention-in 620ms var(--ease) 640ms both;
+}
+
+.interventionMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 9px;
+  border-bottom: 2px solid var(--zoned);
+  color: var(--zoned-ink);
+  font-size: 8.5px;
+}
+
+.interventionMeta span:last-child {
+  color: var(--mute);
+  font-family: var(--sans);
+}
+
+.interventionTitle {
+  margin-top: 14px;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.intervention p {
+  max-width: 32ch;
+  margin: 7px 0 0;
+  color: var(--body);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.interventionActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 15px;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.resetAction {
+  padding: 8px 13px;
+  border-radius: var(--r-pill);
+  background: var(--indigo);
+  color: white;
+  box-shadow: var(--shadow-primary);
+}
+
+.dismissAction {
+  color: var(--body);
+}
+
+@keyframes hero-intervention-in {
+  from {
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hero-trace-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes hero-status {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 1120px) {
+  .composition {
+    left: -40px;
+    transform: translateY(-50%) scale(0.9);
+    transform-origin: left center;
+  }
+}
+
+@media (max-width: 1040px) {
+  .composition {
+    left: -28px;
+    transform: translateY(-50%) scale(0.8);
+  }
+}
+
+@media (max-width: 960px) {
+  .composition {
+    left: -18px;
+    transform: translateY(-50%) scale(0.72);
+  }
+}
+
+@media (max-width: 900px) {
+  .figure {
+    width: 100%;
+    height: 520px;
+  }
+
+  .composition {
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (max-width: 760px) {
+  .figure {
+    height: 490px;
+  }
+
+  .composition {
+    left: 0;
+    width: min(700px, calc(100vw - 20px));
+    height: 468px;
+    transform: translateY(-50%);
+  }
+
+  .surface {
+    right: 0;
+    bottom: 28px;
+  }
+
+  .productGrid {
+    grid-template-columns: minmax(0, 1fr) 138px;
+  }
+
+  .mainPanel {
+    padding: 20px;
+  }
+
+  .breathBlock {
+    display: none;
+  }
+
+  .intervention {
+    right: 12px;
+    width: 300px;
+  }
+}
+
+@media (max-width: 560px) {
+  .figure {
+    height: 450px;
+  }
+
+  .composition {
+    width: calc(100vw - 20px);
+    height: 430px;
+  }
+
+  .surface {
+    bottom: 35px;
+  }
+
+  .topbar {
+    height: 54px;
+    padding: 0 var(--s4);
+  }
+
+  .productGrid {
+    display: block;
+  }
+
+  .mainPanel {
+    padding: var(--s4);
+  }
+
+  .stateHeadline {
+    font-size: 27px;
+  }
+
+  .evidence {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+
+  .evidenceList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evidenceList span:last-child {
+    display: none;
+  }
+
+  .pulsePlot {
+    height: 112px;
+  }
+
+  .readingRail {
+    display: none;
+  }
+
+  .intervention {
+    right: 4px;
+    width: min(286px, calc(100% - 18px));
+    padding: 17px;
+  }
+
+  .interventionTitle {
+    font-size: 21px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .figure,
+  .intervention,
+  .trace,
+  .liveDot {
+    animation: none;
+  }
+
+  .trace {
+    stroke-dashoffset: 0;
+  }
+}

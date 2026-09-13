@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { href: "/session", label: "Tracker" },
   { href: "/dashboard", label: "Sessions" },
   { href: "/insights", label: "Insights" },
-  { href: "/validation", label: "Validation" },
 ] as const;
 
 const HISTORY_STATUS = "Past sessions";
