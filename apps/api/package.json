@@ -8,6 +8,7 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

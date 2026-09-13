@@ -5,6 +5,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:all": "node scripts/dev-all.mjs",
+    "check:env": "node scripts/check-env.mjs",
+    "smoke": "node scripts/smoke-test.mjs",
     "lint": "turbo run lint",
     "clean": "turbo run clean"
   },
