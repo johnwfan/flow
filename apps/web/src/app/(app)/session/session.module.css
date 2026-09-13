@@ -83,8 +83,32 @@
 .plotHeader { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--s1); }
 .plotName { font-size: 13px; color: var(--body); }
 .plotMeta { font-size: 12px; color: var(--mute); }
-.plotCanvas { display: block; width: 100%; background: var(--paper); }
+.plotFrame { position: relative; width: 100%; }
+.plotCanvas { display: block; width: 100%; height: 100%; background: var(--paper); }
 .plotAxis { display: flex; justify-content: space-between; font-size: 10px; color: var(--mute); margin-top: var(--s1); }
+
+/* ── Signal-lost overlay — hatched, never coloured, never interpolated */
+.signalLost {
+  position: absolute;
+  inset: 0;
+  background: var(--none-hatch);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.signalLostLabel {
+  font-family: var(--num);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  background: var(--paper);
+  border-radius: var(--r-pill);
+  color: var(--body);
+  padding: 7px 14px;
+}
+
+/* ── Sparklines (rail) ──────────────────────────────────────────── */
+.sparkCanvas { display: block; width: 58px; height: 100%; flex-shrink: 0; }
+.trendLine { font-size: 11.5px; margin-top: 6px; }
 
 /* ── Confidence meter ───────────────────────────────────────────── */
 .confRow { display: flex; align-items: center; gap: var(--s3); }
@@ -100,9 +124,65 @@
 .heroRow { display: flex; align-items: baseline; gap: 6px; margin-bottom: var(--s5); }
 .heroNum { font-size: 56px; font-weight: 500; letter-spacing: -0.055em; line-height: 0.9; transition: color var(--dur-3) var(--ease); }
 .heroUnit { font-size: 14px; color: var(--mute); }
-.metricRow { display: flex; justify-content: space-between; align-items: baseline; padding: var(--s2) 0; border-top: 1px solid var(--line-soft); }
-.metricLabel { font-size: 12px; color: var(--mute); }
-.metricValue { font-size: 15px; }
+.metricRow { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--line-soft); }
+.metricLabel { flex: 1; font-size: 12px; color: var(--mute); }
+.metricValue { width: 62px; text-align: right; font-size: 13.5px; }
+
+/* ── Preview-state control (dev/demo affordance, header) ───────────
+   Deliberately visually distinct from the live state badge -- a recessed
+   groove segmented control (matches the design system's segmented-control
+   spec) with a small "Preview state" label and a caption under the header
+   when active, so it can never be mistaken for a live sensor reading. */
+.previewGroup { display: flex; align-items: center; gap: var(--s2); }
+.previewLabel { font-size: 11.5px; color: var(--mute); }
+.previewSeg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--sink);
+  box-shadow: var(--shadow-groove);
+}
+.previewChip {
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--r-pill);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: transparent;
+  color: var(--mute);
+  box-shadow: none;
+}
+.previewChipActive { background: var(--raise); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.previewCaption { font-size: 11.5px; color: var(--mute); margin: calc(var(--s4) * -1) 0 var(--s4); }
+.previewTag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--mute);
+  background: var(--sink);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+
+/* ── Agent streaming status ─────────────────────────────────────── */
+.streamRow { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s5); }
+.streamDot { width: 7px; height: 7px; border-radius: 999px; flex: none; animation: flow-breathe 2.6s var(--ease) infinite; transition: background var(--dur-3) var(--ease); }
+
+/* ── Thought probe ──────────────────────────────────────────────── */
+.probeBlock { margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--line-soft); }
+.probeQuestion { font-size: 15px; font-weight: 500; letter-spacing: -0.02em; }
+.probeActions { display: flex; gap: var(--s2); margin-top: var(--s3); flex-wrap: wrap; }
+.probeFocusBtn {
+  padding: 8px 15px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--sink);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.probeCountdown { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); }
 
 /* ── Alert card ─────────────────────────────────────────────────── */
 .plotsWrap { position: relative; transition: opacity var(--dur-2) var(--ease); }
@@ -124,10 +204,59 @@
 .alertBody { font-size: 13.5px; line-height: 1.5; color: var(--body); max-width: 42ch; margin-bottom: var(--s4); }
 .alertActions { display: flex; gap: var(--s2); flex-wrap: wrap; }
 
-/* ── Breathing pacer (simplified — see report for what's not ported) */
+/* ── Breathing pacer ────────────────────────────────────────────────
+   Two rhythms that must never be mistaken for each other (see the design
+   handoff README's "Breathing pacer" spec). The core disc's size is driven
+   inline from the real BreathingGuideMessage's phase + duration_ms (an
+   actual CSS transition, so reduced-motion's global `transition-duration:
+   0.001ms !important` rule makes it snap between phases instead of easing,
+   satisfying the "ring snaps once per phase" accessibility requirement for
+   free). The ghost ring / concentric pings / rotating sweep are decorative
+   ambient loops layered underneath and are not rendered at all when
+   `prefers-reduced-motion` is set (see the component's usePrefersReducedMotion
+   check) — the label's "in 4" / "out 8" text always carries the phase and
+   count regardless of motion preference. */
 .pacerWrap { width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; position: relative; }
-.pacerRing { position: absolute; border-radius: 50%; transition: transform 1s linear, opacity 1s linear; }
-.pacerLabel { font-family: var(--mono); font-size: 10px; z-index: 1; }
+.pacerCore { position: relative; border-radius: 50%; transition: width var(--dur-3) linear, height var(--dur-3) linear; }
+.pacerLabel { font-family: var(--mono); font-size: 10px; z-index: 1; position: absolute; }
+
+.pacerGhost, .pacerRingA, .pacerRingB {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+.pacerGhost { border: 1.5px solid var(--zoned); animation: pacer-ghost 8s ease-in-out infinite; }
+.pacerRingA, .pacerRingB { background: var(--zoned-pale); animation: pacer-ping 8s ease-in-out infinite; }
+.pacerRingB { animation-delay: -4s; }
+
+.pacerArc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 106px;
+  height: 106px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: var(--spiral);
+  border-left-color: var(--spiral);
+  animation: pacer-spin 12s linear infinite;
+}
+
+@keyframes pacer-ghost {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(3.4); opacity: 0; }
+}
+@keyframes pacer-ping {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+  100% { transform: translate(-50%, -50%) scale(2.7); opacity: 1; }
+}
+@keyframes pacer-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
 
 /* ── Edge states ────────────────────────────────────────────────── */
 .edgeState { text-align: center; padding: var(--s7) var(--s4); color: var(--body); }

@@ -1,27 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { WsMessage, AlertMessage, BreathingGuideMessage } from "@flow/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { WsMessage, AlertMessage, BreathingGuideMessage, ThoughtProbeMessage } from "@flow/shared";
+import { DetectionStatus, State } from "@flow/shared";
 import styles from "./session.module.css";
 
 const WS_URL = process.env.NEXT_PUBLIC_AGENT_WS_URL ?? "ws://localhost:8765";
 
-// State -> design-token color name (see session.module.css .theme block).
-// NoSignal deliberately has no entry -- missing data is hatched, never
-// colored, per the design handoff.
+// State -> design-token color group name (see globals.css's state-colour block).
+// no_signal deliberately has no entry -- missing data is hatched, never
+// colored, per the design handoff's hard rule. "break" is included so the
+// dev-only state-preview control (which can show a mood the live classifier
+// never actually emits, since `State` has no "break" member) still resolves
+// to a real token group.
 const STATE_COLOR: Record<string, string> = {
   focused: "deep",
   zoned_out: "zoned",
   spiraling: "spiral",
   warmup: "deep", // "Learning your baseline" uses the deep dot per the handoff's Calibrating edge state
+  break: "break",
 };
 
-// Mirrors session.module.css's .theme block. Duplicated here (rather than
+// Mirrors globals.css's state-colour tokens. Duplicated here (rather than
 // resolved from the CSS custom property at runtime) because canvas stroke
 // colors need a real color string, and the tokens are oklch() values scoped
-// to .theme, not :root -- resolving them via a detached probe element would
-// need the probe inside that subtree, which is more fragile than just
-// keeping one small duplicate map in sync with the CSS file.
+// to :root, which needs a mounted probe element to resolve reliably -- a
+// small duplicate map kept in sync with the CSS file is simpler and matches
+// the pattern the rest of this file already uses for STATE_COLOR.
 const STATE_STROKE: Record<string, string> = {
   deep: "oklch(0.5 0.24 258)",
   zoned: "oklch(0.66 0.038 248)",
@@ -38,29 +43,149 @@ function colorVar(state: string | null, step: "" | "-ink" | "-mid" | "-pale" = "
 
 function strokeFor(state: string | null): string {
   const key = state ? STATE_COLOR[state] : undefined;
-  return key ? STATE_STROKE[key] ?? MUTE_STROKE : MUTE_STROKE;
+  return key ? (STATE_STROKE[key] ?? MUTE_STROKE) : MUTE_STROKE;
 }
 
 function readableState(state: string): string {
   return state.replace(/_/g, " ");
 }
 
+function narrativeFor(state: string): string {
+  switch (state) {
+    case "focused":
+      return "You're in it";
+    case "zoned_out":
+      return "Drifting a little";
+    case "spiraling":
+      return "Winding up";
+    case "break":
+      return "Away from the screen";
+    case "no_signal":
+      return "Lost your face for a moment";
+    default:
+      return readableState(state);
+  }
+}
+
+// ── Dev/demo state preview ────────────────────────────────────────────────
+// A "Preview state" segmented control lets a developer or demoer see every
+// mood the design system defines without a live agent connection. It is
+// explicitly a demo affordance (see its label + caption in the header) and
+// never touches the safety-relevant real-time path: alerts, the breathing
+// guide driven by a real BreathingGuideMessage, the thought probe, app
+// context, camera-refused/validation-hint edge states and the connection
+// indicator all always reflect real WS data, never the preview selection.
+// Only the state badge/headline/reasons and the physiology readouts +
+// plots are swapped to placeholder numbers while previewing -- the same
+// realistic placeholder values the reference prototype and its README use
+// (resting HR 55-85 bpm, HRV 46-112 ms, breathing 12-20/min).
+type PreviewKey = "focused" | "zoned" | "spiral" | "break" | "warmup" | "lost";
+
+const PREVIEW_OPTIONS: { key: PreviewKey; label: string }[] = [
+  { key: "focused", label: "focused" },
+  { key: "zoned", label: "zoned" },
+  { key: "spiral", label: "spiral" },
+  { key: "break", label: "break" },
+  { key: "warmup", label: "warmup" },
+  { key: "lost", label: "lost" },
+];
+
+const PREVIEW_TARGETS: Record<
+  PreviewKey,
+  { machine: string; hr: number | null; hrv: number | null; br: number | null; blink: number | null; conf: number; reasons: string[] }
+> = {
+  focused: {
+    machine: "focused",
+    hr: 61,
+    hrv: 78,
+    br: 12.8,
+    blink: 15,
+    conf: 0.91,
+    reasons: ["HR steady 61", "I:E 1 : 1.9", "blink 15 /min", "gaze on-task 94%", "no app switches 11m"],
+  },
+  zoned: {
+    machine: "zoned_out",
+    hr: 55,
+    hrv: 92,
+    br: 11.8,
+    blink: 4,
+    conf: 0.86,
+    reasons: ["HR fell 6 bpm", "blink 4 /min", "gaze fixed 88%", "no scroll 2m10s"],
+  },
+  spiral: {
+    machine: "spiraling",
+    hr: 81,
+    hrv: 48,
+    br: 18.6,
+    blink: 21,
+    conf: 0.83,
+    reasons: ["HR up 81", "I:E 1 : 1.1", "blink 21 /min", "gaze off-task 39%", "4 switches 3m"],
+  },
+  break: { machine: "break", hr: 67, hrv: 84, br: 14.2, blink: 17, conf: 0.74, reasons: [] },
+  warmup: { machine: "warmup", hr: 64, hrv: 74, br: 13.4, blink: 16, conf: 0.52, reasons: [] },
+  lost: { machine: "no_signal", hr: null, hrv: null, br: null, blink: null, conf: 0.28, reasons: [] },
+};
+
+const ALERT_COPY: Record<"zone_out" | "spiral", { meta: string; title: string; primary: string; secondary: string }> = {
+  zone_out: { meta: "soft chime", title: "Still with it?", primary: "2-min reset", secondary: "Take a break" },
+  spiral: {
+    meta: "voice-guided",
+    title: "Your breathing is running ahead of you.",
+    primary: "Start the loop",
+    secondary: "Take a break",
+  },
+};
+
+const DEMO_ALERT: Record<"zone_out" | "spiral", AlertMessage> = {
+  zone_out: { kind: "alert", type: "zone_out", reasons: ["pulse_down_six", "blinks_down_to_four", "gaze_parked"], ts: 0, duration_s: 90 },
+  spiral: { kind: "alert", type: "spiral", reasons: ["breathing_up_to_nineteen", "climbing_four_minutes"], ts: 0, duration_s: 240 },
+};
+
 interface RollingSeries {
   values: (number | null)[];
 }
 
 const SERIES_LENGTH = 300; // ~15s at 20Hz
+const SPARK_TAIL = 40; // matches the reference prototype's 40-sample sparkline window
 
-function useRollingSeries(): [RollingSeries, (v: number | null) => void] {
+function useRollingSeries(length: number = SERIES_LENGTH): [RollingSeries, (v: number | null) => void] {
   const ref = useRef<RollingSeries>({ values: [] });
-  const push = useCallback((v: number | null) => {
-    ref.current.values.push(v);
-    if (ref.current.values.length > SERIES_LENGTH) ref.current.values.shift();
-  }, []);
+  const push = useCallback(
+    (v: number | null) => {
+      ref.current.values.push(v);
+      if (ref.current.values.length > length) ref.current.values.shift();
+    },
+    [length],
+  );
   return [ref.current, push];
 }
 
-function Waveform({ series, color, height }: { series: RollingSeries; color: string; height: number }) {
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return reduced;
+}
+
+function Waveform({
+  series,
+  color,
+  height,
+  lost,
+  ariaLabel,
+}: {
+  series: RollingSeries;
+  color: string;
+  height: number;
+  lost: boolean;
+  ariaLabel: string;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -128,7 +253,132 @@ function Waveform({ series, color, height }: { series: RollingSeries; color: str
     return () => cancelAnimationFrame(raf);
   }, [series, color]);
 
-  return <canvas ref={canvasRef} className={styles.plotCanvas} style={{ height }} />;
+  return (
+    <div className={styles.plotFrame} style={{ height }}>
+      <canvas ref={canvasRef} className={styles.plotCanvas} role="img" aria-label={ariaLabel} />
+      {lost && (
+        <div className={styles.signalLost}>
+          <span className={styles.signalLostLabel}>signal lost &middot; not interpolated</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Small trend sparkline for the rail -- same rolling-series data as the big
+// waveforms, just the most recent tail and no gridlines/hatching (a lost
+// signal there just blanks to "--" via the surrounding number, per the
+// handoff's "missing data is hatched, never coloured" rule -- there is
+// nothing to hatch in a 18px strip).
+function Sparkline({ series, color, height, ariaLabel }: { series: RollingSeries; color: string; height: number; ariaLabel: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let raf: number;
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      if (canvas.width !== rect.width * dpr) canvas.width = rect.width * dpr;
+      if (canvas.height !== rect.height * dpr) canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext("2d")!;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const tail = series.values.slice(-SPARK_TAIL);
+      const known = tail.filter((v): v is number => v != null);
+      if (known.length < 2) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+      const min = Math.min(...known);
+      const max = Math.max(...known);
+      const pad = (max - min) * 0.15 || 1;
+      const lo = min - pad;
+      const hi = max + pad;
+      const stepX = tail.length > 1 ? w / (tail.length - 1) : w;
+
+      ctx.beginPath();
+      let started = false;
+      let lastX = 0;
+      let lastY = 0;
+      tail.forEach((v, i) => {
+        if (v == null) {
+          started = false;
+          return;
+        }
+        const x = i * stepX;
+        const y = h - 2 - ((v - lo) / (hi - lo)) * (h - 4);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+        lastX = x;
+        lastY = y;
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.4;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [series, color]);
+
+  return <canvas ref={canvasRef} className={styles.sparkCanvas} style={{ height }} role="img" aria-label={ariaLabel} />;
+}
+
+// Two rhythms that must never be mistaken for each other (see the design
+// handoff's "Breathing pacer" spec). Driven by the real BreathingGuideMessage
+// when the agent sends one (phase + duration_ms come straight from the wire);
+// the decorative concentric-ping / rotating-sweep flourishes are ambient CSS
+// loops layered on top, not tied to exact server timing. Rhythm is inferred
+// from the reported I:E ratio: close to 1:1 reads as the symmetric
+// "upregulate" reset, a longer exhale reads as the "extended exhale" spiral
+// pacer -- the contract has no explicit "kind" field to read instead.
+function BreathingPacer({ guide }: { guide: BreathingGuideMessage }) {
+  const reducedMotion = usePrefersReducedMotion();
+  const kind: "upregulate" | "extended-exhale" = guide.ie_ratio > 1.3 ? "extended-exhale" : "upregulate";
+  const isInhale = guide.phase !== "exhale";
+  const color = kind === "extended-exhale" ? "var(--spiral)" : "var(--zoned)";
+  const seconds = Math.max(1, Math.round(guide.duration_ms / 1000));
+  const label = `${guide.phase === "exhale" ? "out" : "in"} ${seconds}`;
+
+  const coreSize = kind === "upregulate" ? (isInhale ? 97 : 36) : isInhale ? 92 : 48;
+
+  return (
+    <div className={styles.pacerWrap} data-kind={kind}>
+      {!reducedMotion && kind === "upregulate" && (
+        <>
+          <span className={styles.pacerGhost} aria-hidden="true" />
+          <span className={styles.pacerRingA} aria-hidden="true" />
+          <span className={styles.pacerRingB} aria-hidden="true" />
+        </>
+      )}
+      {!reducedMotion && kind === "extended-exhale" && <span className={styles.pacerArc} aria-hidden="true" />}
+      <span
+        className={styles.pacerCore}
+        style={{
+          width: coreSize,
+          height: coreSize,
+          background: color,
+          transitionDuration: reducedMotion ? "0ms" : `${guide.duration_ms}ms`,
+        }}
+      />
+      <span className={styles.pacerLabel}>{label}</span>
+    </div>
+  );
 }
 
 export default function SessionPage() {
@@ -136,15 +386,20 @@ export default function SessionPage() {
   const [connected, setConnected] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [phase, setPhase] = useState<"idle" | "warmup" | "active" | "paused" | "ended">("idle");
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   const [state, setState] = useState<{ state: string; reasons: string[]; confidence: number } | null>(null);
   const [pulse, setPulse] = useState<number | null>(null);
   const [breathing, setBreathing] = useState<number | null>(null);
   const [hrv, setHrv] = useState<number | null>(null);
   const [eda, setEda] = useState<number | null>(null);
   const [conf, setConf] = useState<number | null>(null);
+  const [blinkDetected, setBlinkDetected] = useState<DetectionStatus | null>(null);
   const [appContext, setAppContext] = useState<{ app_title: string; category: string } | null>(null);
   const [alert, setAlert] = useState<AlertMessage | null>(null);
   const [guide, setGuide] = useState<BreathingGuideMessage | null>(null);
+  const [probe, setProbe] = useState<ThoughtProbeMessage | null>(null);
+  const [probeSecondsLeft, setProbeSecondsLeft] = useState(20);
   const [elapsedS, setElapsedS] = useState(0);
   const startedAtRef = useRef<number | null>(null);
   const [validationHint, setValidationHint] = useState<string | null>(null);
@@ -153,8 +408,25 @@ export default function SessionPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
 
+  const [lastPacketAt, setLastPacketAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const [pulseSeries, pushPulse] = useRollingSeries();
   const [breathSeries, pushBreath] = useRollingSeries();
+  const [hrvSeries, pushHrv] = useRollingSeries();
+  const [blinkSeries, pushBlink] = useRollingSeries();
+  const [edaSeries, pushEda] = useRollingSeries();
+
+  // Dev/demo state preview -- see the block comment above PreviewKey.
+  const [previewState, setPreviewState] = useState<PreviewKey | null>(null);
+  const previewStateRef = useRef<PreviewKey | null>(null);
+  previewStateRef.current = previewState;
+  const [previewAlertOn, setPreviewAlertOn] = useState(false);
+  const demoRef = useRef({ hr: 61, hrv: 78, br: 12.8, blink: 15 });
 
   useEffect(() => {
     let cancelled = false;
@@ -172,20 +444,29 @@ export default function SessionPage() {
       ws.onerror = () => ws.close();
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data) as WsMessage;
+        setLastPacketAt(Date.now());
         switch (msg.kind) {
           case "sample":
-            setPulse(msg.pulse_bpm);
-            setBreathing(msg.breathing_rpm);
-            setHrv(msg.hrv_ms);
             setEda(msg.eda_us);
-            setConf(msg.conf);
-            pushPulse(msg.pulse_bpm);
-            pushBreath(msg.breathing_rpm);
+            pushEda(msg.eda_us);
+            if (!previewStateRef.current) {
+              setPulse(msg.pulse_bpm);
+              setBreathing(msg.breathing_rpm);
+              setHrv(msg.hrv_ms);
+              setConf(msg.conf);
+              setBlinkDetected(msg.blink);
+              pushPulse(msg.pulse_bpm);
+              pushBreath(msg.breathing_rpm);
+              pushHrv(msg.hrv_ms);
+              pushBlink(msg.blink === DetectionStatus.Detected ? 1 : msg.blink === DetectionStatus.NotDetected ? 0 : null);
+            }
             break;
           case "state":
-            setState({ state: msg.state, reasons: msg.reasons, confidence: msg.confidence });
-            if (msg.state === "warmup") setPhase("warmup");
-            else if (phase !== "paused") setPhase("active");
+            if (!previewStateRef.current) {
+              setState({ state: msg.state, reasons: msg.reasons, confidence: msg.confidence });
+            }
+            if (msg.state === State.Warmup) setPhase("warmup");
+            else if (phaseRef.current !== "paused") setPhase("active");
             break;
           case "alert":
             setAlert(msg);
@@ -196,6 +477,10 @@ export default function SessionPage() {
             break;
           case "breathing_guide":
             setGuide(msg);
+            break;
+          case "thought_probe":
+            setProbe(msg);
+            setProbeSecondsLeft(20);
             break;
           default: {
             // Diagnostic-only messages outside the frozen WsMessage
@@ -228,10 +513,107 @@ export default function SessionPage() {
     return () => clearInterval(id);
   }, [phase]);
 
+  // Thought-probe self-dismiss countdown -- "disappears on its own", per the
+  // handoff. Declining (letting it expire) is not recorded as anything.
+  useEffect(() => {
+    if (!probe) return;
+    const id = setInterval(() => {
+      setProbeSecondsLeft((s) => {
+        if (s <= 1) {
+          setProbe(null);
+          return 20;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [probe]);
+
+  function respondToProbe(answer: "focused" | "drifting") {
+    const ws = wsRef.current;
+    if (probe && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(
+        JSON.stringify({
+          kind: "thought_probe",
+          ts: probe.ts,
+          classifier_state: probe.classifier_state,
+          user_response: answer,
+        }),
+      );
+    }
+    setProbe(null);
+  }
+
+  // Demo ticker: while previewing, ease the same numeric readouts the real
+  // "sample" handler drives toward the selected state's placeholder targets,
+  // with the same bounded-jitter easing the reference prototype uses. Never
+  // touches alert/guide/probe/appContext/connection -- those stay real.
+  useEffect(() => {
+    if (!previewState) return;
+    const target = PREVIEW_TARGETS[previewState];
+    setState({ state: target.machine, reasons: target.reasons, confidence: target.conf });
+    if (target.hr == null) {
+      setPulse(null);
+      setBreathing(null);
+      setHrv(null);
+      setConf(target.conf);
+      setBlinkDetected(null);
+      pushPulse(null);
+      pushBreath(null);
+      pushHrv(null);
+      pushBlink(null);
+      return;
+    }
+    const ease = (v: number, t: number, j: number) => v + (t - v) * 0.16 + (Math.random() - 0.5) * j;
+    const id = setInterval(() => {
+      const d = demoRef.current;
+      d.hr = ease(d.hr, target.hr!, 1.1);
+      d.hrv = ease(d.hrv, target.hrv!, 2.2);
+      d.br = ease(d.br, target.br!, 0.35);
+      d.blink = ease(d.blink, target.blink!, 0.8);
+      setPulse(d.hr);
+      setBreathing(d.br);
+      setHrv(d.hrv);
+      setConf(target.conf);
+      setBlinkDetected(Math.random() < d.blink / 30 ? DetectionStatus.Detected : DetectionStatus.NotDetected);
+      pushPulse(d.hr);
+      pushBreath(d.br);
+      pushHrv(d.hrv);
+      pushBlink(Math.random() < d.blink / 30 ? 1 : 0);
+    }, 200);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewState]);
+
+  // Demo breathing pacer -- lets a developer see both pacer rhythms without
+  // waiting for a real alert + agent-driven guide. Only synthesizes one when
+  // previewing the two states that actually trigger a real guide, and only
+  // while no real guide is already streaming.
+  useEffect(() => {
+    if (previewState !== "zoned" && previewState !== "spiral") return;
+    const inhaleMs = 4000;
+    const exhaleMs = previewState === "spiral" ? 8000 : 4000;
+    const ieRatio = previewState === "spiral" ? 2 : 1;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const step = (nextPhase: "inhale" | "exhale") => {
+      if (cancelled) return;
+      const duration = nextPhase === "inhale" ? inhaleMs : exhaleMs;
+      setGuide({ kind: "breathing_guide", phase: nextPhase, duration_ms: duration, measured_rpm: PREVIEW_TARGETS[previewState].br ?? 12, ie_ratio: ieRatio });
+      timer = setTimeout(() => step(nextPhase === "inhale" ? "exhale" : "inhale"), duration);
+    };
+    step("inhale");
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      setGuide(null);
+    };
+  }, [previewState]);
+
   function send(action: "start" | "end" | "pause" | "resume") {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const id = action === "start" ? crypto.randomUUID() : sessionId ?? crypto.randomUUID();
+    const id = action === "start" ? crypto.randomUUID() : (sessionId ?? crypto.randomUUID());
     ws.send(JSON.stringify({ kind: "session_control", action, session_id: id, ts: Date.now() }));
     if (action === "start") {
       setSessionId(id);
@@ -278,8 +660,68 @@ export default function SessionPage() {
 
   const currentColor = colorVar(state?.state ?? null);
   const isRunning = phase === "warmup" || phase === "active" || phase === "paused";
+  const isPreviewing = previewState !== null;
+  const panelVisible = isRunning || isPreviewing;
+  const isLost = state?.state === "no_signal";
 
-  if (!connected) {
+  const trend = useMemo(() => {
+    const tail = pulseSeries.values.slice(-SPARK_TAIL).filter((v): v is number => v != null);
+    if (isLost || tail.length < 2) return { text: "no signal", color: "var(--mute)" };
+    const delta = +(tail[tail.length - 1] - tail[0]).toFixed(1);
+    const text = `${delta > 0 ? "+" : ""}${delta.toFixed(1)} recently`;
+    const color = delta > 1.5 ? "var(--spiral-ink)" : delta < -1.5 ? "var(--zoned-ink)" : "var(--mute)";
+    return { text, color };
+  }, [pulseSeries, pulse, isLost]);
+
+  const packetAgeS = lastPacketAt != null ? Math.max(0, Math.round((now - lastPacketAt) / 1000)) : null;
+  const streaming = packetAgeS != null && packetAgeS < 5;
+
+  const effectiveAlert =
+    alert ?? (previewAlertOn ? { ...DEMO_ALERT[state?.state === "spiraling" ? "spiral" : "zone_out"], ts: Date.now() } : null);
+  const alertMood = effectiveAlert?.type === "spiral" ? "spiral" : "zone_out";
+  const alertCopy = ALERT_COPY[alertMood];
+
+  function dismissAlert() {
+    setAlert(null);
+    setPreviewAlertOn(false);
+  }
+
+  // Roving-tabindex radiogroup for the preview-state segmented control, per
+  // the handoff's accessibility spec (Arrow/Home/End move focus with
+  // selection).
+  const previewBtnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const allPreviewKeys: (PreviewKey | "live")[] = ["live", ...PREVIEW_OPTIONS.map((o) => o.key)];
+  function focusPreviewIndex(i: number) {
+    const clamped = (i + allPreviewKeys.length) % allPreviewKeys.length;
+    previewBtnRefs.current[clamped]?.focus();
+  }
+  function onPreviewKeyDown(e: React.KeyboardEvent, index: number) {
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = (index + 1) % allPreviewKeys.length;
+      const key = allPreviewKeys[next];
+      setPreviewState(key === "live" ? null : key);
+      focusPreviewIndex(next);
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = (index - 1 + allPreviewKeys.length) % allPreviewKeys.length;
+      const key = allPreviewKeys[prev];
+      setPreviewState(key === "live" ? null : key);
+      focusPreviewIndex(prev);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setPreviewState(null);
+      focusPreviewIndex(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      const last = allPreviewKeys.length - 1;
+      const key = allPreviewKeys[last];
+      setPreviewState(key === "live" ? null : key);
+      focusPreviewIndex(last);
+    }
+  }
+
+  if (!connected && !isPreviewing) {
     return (
       <div className={styles.theme}>
         <div className={styles.edgeState}>
@@ -294,7 +736,7 @@ export default function SessionPage() {
     );
   }
 
-  if (cameraRefused) {
+  if (cameraRefused && !isPreviewing) {
     return (
       <div className={styles.theme}>
         <div className={styles.edgeState} style={{ background: "var(--none-hatch)" }}>
@@ -315,10 +757,53 @@ export default function SessionPage() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.stateDot} style={{ background: state ? currentColor : "var(--tick)" }} />
-          <span className={styles.title}>{isRunning ? "Active session" : "Session"}</span>
+          <span className={styles.title}>{isRunning ? "Active session" : isPreviewing ? "Session preview" : "Session"}</span>
           {isRunning && <span className={`${styles.elapsed} ${styles.num}`}>{formatElapsed(elapsedS)}</span>}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div className={styles.previewGroup}>
+            <span id="preview-state-label" className={styles.previewLabel}>
+              Preview state
+            </span>
+            <div role="radiogroup" aria-labelledby="preview-state-label" className={styles.previewSeg}>
+              <button
+                ref={(el) => {
+                  previewBtnRefs.current[0] = el;
+                }}
+                role="radio"
+                aria-checked={!isPreviewing}
+                tabIndex={!isPreviewing ? 0 : -1}
+                className={`${styles.previewChip} ${!isPreviewing ? styles.previewChipActive : ""}`}
+                onClick={() => setPreviewState(null)}
+                onKeyDown={(e) => onPreviewKeyDown(e, 0)}
+              >
+                live
+              </button>
+              {PREVIEW_OPTIONS.map((o, i) => (
+                <button
+                  key={o.key}
+                  ref={(el) => {
+                    previewBtnRefs.current[i + 1] = el;
+                  }}
+                  role="radio"
+                  aria-checked={previewState === o.key}
+                  tabIndex={previewState === o.key ? 0 : -1}
+                  className={`${styles.previewChip} ${previewState === o.key ? styles.previewChipActive : ""}`}
+                  onClick={() => setPreviewState(o.key)}
+                  onKeyDown={(e) => onPreviewKeyDown(e, i + 1)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            className={`${styles.btn} ${styles.btnQuiet}`}
+            style={{ fontSize: 11.5, padding: "6px 13px" }}
+            onClick={() => setPreviewAlertOn((v) => !v)}
+          >
+            {previewAlertOn ? "Hide intervention" : "Preview intervention"}
+          </button>
           {!isRunning && (
             <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => send("start")}>
               Start session
@@ -341,8 +826,14 @@ export default function SessionPage() {
           )}
         </div>
       </div>
+      {isPreviewing && (
+        <div className={styles.previewCaption}>
+          Preview only &mdash; the badge, plots and readouts below show placeholder data for {previewState}. Not connected to the
+          camera.
+        </div>
+      )}
 
-      {!isRunning ? (
+      {!panelVisible ? (
         <div className={styles.edgeState}>
           <p style={{ fontSize: 18 }}>Ready when you are.</p>
           <p style={{ fontSize: 13.5, color: "var(--body)", marginTop: 8, maxWidth: "48ch", margin: "8px auto" }}>
@@ -351,7 +842,7 @@ export default function SessionPage() {
           </p>
         </div>
       ) : (
-        <div className={`${styles.plotsWrap} ${alert ? styles.plotsDimmed : ""}`}>
+        <div className={`${styles.plotsWrap} ${effectiveAlert ? styles.plotsDimmed : ""}`}>
           <div className={styles.grid}>
             <div>
               {state && (
@@ -359,6 +850,7 @@ export default function SessionPage() {
                   <div className={styles.badgeRow}>
                     <div className={styles.badgeSwatch} style={{ background: currentColor }} />
                     <span className={styles.badgeName}>{state.state}</span>
+                    {isPreviewing && <span className={styles.previewTag}>preview</span>}
                   </div>
                   <div className={styles.stateHeadline}>
                     {state.state === "warmup" ? "Learning your baseline" : narrativeFor(state.state)}
@@ -382,7 +874,13 @@ export default function SessionPage() {
                   <span className={styles.plotName}>Pulse</span>
                   <span className={`${styles.plotMeta} ${styles.num}`}>rolling 15s</span>
                 </div>
-                <Waveform series={pulseSeries} color={strokeFor(state?.state ?? null)} height={160} />
+                <Waveform
+                  series={pulseSeries}
+                  color={strokeFor(state?.state ?? null)}
+                  height={160}
+                  lost={isLost}
+                  ariaLabel={`Pulse waveform, currently ${pulse != null ? Math.round(pulse) : "unknown"} beats per minute, state ${state?.state ?? "unknown"}`}
+                />
               </div>
 
               <div className={styles.plotBlock}>
@@ -390,7 +888,13 @@ export default function SessionPage() {
                   <span className={styles.plotName}>Breathing</span>
                   <span className={`${styles.plotMeta} ${styles.num}`}>rolling 15s</span>
                 </div>
-                <Waveform series={breathSeries} color={strokeFor(state?.state ?? null)} height={96} />
+                <Waveform
+                  series={breathSeries}
+                  color={strokeFor(state?.state ?? null)}
+                  height={96}
+                  lost={isLost}
+                  ariaLabel={`Breathing waveform, currently ${breathing != null ? breathing.toFixed(1) : "unknown"} breaths per minute`}
+                />
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", gap: 24, marginTop: 24 }}>
@@ -433,20 +937,39 @@ export default function SessionPage() {
                 </span>
                 <span className={styles.heroUnit}>bpm</span>
               </div>
+              <Sparkline
+                series={pulseSeries}
+                color={strokeFor(state?.state ?? null)}
+                height={26}
+                ariaLabel="Heart rate over the last forty samples"
+              />
+              <div className={`${styles.trendLine} ${styles.num}`} style={{ color: trend.color }}>
+                {trend.text}
+              </div>
 
-              <div className={styles.metricRow}>
-                <span className={styles.metricLabel}>HRV</span>
-                <span className={`${styles.metricValue} ${styles.num}`}>{hrv != null ? Math.round(hrv) : "—"} ms</span>
-              </div>
-              <div className={styles.metricRow}>
-                <span className={styles.metricLabel}>Breathing</span>
-                <span className={`${styles.metricValue} ${styles.num}`}>
-                  {breathing != null ? breathing.toFixed(1) : "—"} /min
-                </span>
-              </div>
-              <div className={styles.metricRow}>
-                <span className={styles.metricLabel}>EDA</span>
-                <span className={`${styles.metricValue} ${styles.num}`}>{eda != null ? eda.toFixed(2) : "—"} µS</span>
+              <div style={{ marginTop: 20 }}>
+                <div className={styles.metricRow}>
+                  <span className={styles.metricLabel}>Variability</span>
+                  <Sparkline series={hrvSeries} color="var(--mute)" height={18} ariaLabel="Heart rate variability trend" />
+                  <span className={`${styles.metricValue} ${styles.num}`}>{hrv != null ? Math.round(hrv) : "—"} ms</span>
+                </div>
+                <div className={styles.metricRow}>
+                  <span className={styles.metricLabel}>Breathing</span>
+                  <Sparkline series={breathSeries} color="var(--mute)" height={18} ariaLabel="Breathing rate trend" />
+                  <span className={`${styles.metricValue} ${styles.num}`}>{breathing != null ? breathing.toFixed(1) : "—"} /min</span>
+                </div>
+                <div className={styles.metricRow}>
+                  <span className={styles.metricLabel}>Blinks</span>
+                  <Sparkline series={blinkSeries} color="var(--mute)" height={18} ariaLabel="Blink detection trend" />
+                  <span className={`${styles.metricValue} ${styles.num}`}>
+                    {blinkDetected === DetectionStatus.Detected ? "detected" : blinkDetected === DetectionStatus.NotDetected ? "quiet" : "—"}
+                  </span>
+                </div>
+                <div className={styles.metricRow}>
+                  <span className={styles.metricLabel}>EDA</span>
+                  <Sparkline series={edaSeries} color="var(--mute)" height={18} ariaLabel="Electrodermal activity trend" />
+                  <span className={`${styles.metricValue} ${styles.num}`}>{eda != null ? eda.toFixed(2) : "—"} µS</span>
+                </div>
               </div>
 
               <div style={{ marginTop: 20 }}>
@@ -481,25 +1004,58 @@ export default function SessionPage() {
                 )}
               </div>
 
-              {guide && (
-                <div style={{ marginTop: 24, display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <div className={styles.pacerWrap}>
-                    <div
-                      className={styles.pacerRing}
-                      style={{
-                        width: guide.phase === "inhale" ? 92 : 52,
-                        height: guide.phase === "inhale" ? 92 : 52,
-                        background: "var(--zoned-pale)",
-                        transitionDuration: `${guide.duration_ms}ms`,
-                      }}
-                    />
-                    <span className={styles.pacerLabel}>
-                      {guide.phase} {Math.round(guide.duration_ms / 1000)}
+              <div className={styles.streamRow}>
+                <span className={styles.streamDot} style={{ background: streaming ? currentColor : "var(--tick)" }} />
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{streaming ? "Agent streaming" : "Agent idle"}</div>
+                  <div className={`${styles.railLabel} ${styles.num}`} style={{ marginBottom: 0 }}>
+                    {packetAgeS != null ? `last packet ${packetAgeS}s ago` : "no packets yet"}
+                  </div>
+                </div>
+              </div>
+
+              {probe && (
+                <div className={styles.probeBlock}>
+                  <div className={styles.probeQuestion}>Where are you right now?</div>
+                  <div className={styles.probeActions}>
+                    <button
+                      className={styles.probeFocusBtn}
+                      style={{ boxShadow: `inset 0 0 0 1px ${currentColor}` }}
+                      onClick={() => respondToProbe("focused")}
+                    >
+                      Focused
+                    </button>
+                    <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => respondToProbe("drifting")}>
+                      Drifting
+                    </button>
+                  </div>
+                  <div className={styles.probeCountdown}>
+                    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                      <circle cx="9" cy="9" r="7" fill="none" stroke="var(--line-soft)" strokeWidth="2" />
+                      <circle
+                        cx="9"
+                        cy="9"
+                        r="7"
+                        fill="none"
+                        stroke={currentColor}
+                        strokeWidth="2"
+                        strokeDasharray={2 * Math.PI * 7}
+                        strokeDashoffset={2 * Math.PI * 7 * (1 - probeSecondsLeft / 20)}
+                        transform="rotate(-90 9 9)"
+                      />
+                    </svg>
+                    <span className={`${styles.num}`} style={{ fontSize: 11.5, color: "var(--mute)" }}>
+                      {probeSecondsLeft}s &middot; disappears on its own
                     </span>
                   </div>
-                  <div style={{ fontSize: 11.5, color: "var(--mute)", marginTop: 8 }}>
-                    I:E 1 : {guide.ie_ratio.toFixed(1)}
-                  </div>
+                  <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--mute)" }}>There&apos;s no wrong answer.</div>
+                </div>
+              )}
+
+              {guide && (
+                <div style={{ marginTop: 24, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <BreathingPacer guide={guide} />
+                  <div style={{ fontSize: 11.5, color: "var(--mute)", marginTop: 8 }}>I:E 1 : {guide.ie_ratio.toFixed(1)}</div>
                 </div>
               )}
             </div>
@@ -507,33 +1063,34 @@ export default function SessionPage() {
         </div>
       )}
 
-      {alert && (
+      {effectiveAlert && (
         <div
           className={styles.alertCard}
           role="alertdialog"
-          style={{ borderTop: `2px solid ${alert.type === "zone_out" ? "var(--zoned)" : "var(--spiral)"}` }}
+          aria-label="Intervention"
+          style={{ borderTop: `2px solid ${alertMood === "zone_out" ? "var(--zoned)" : "var(--spiral)"}` }}
         >
-          <div
-            className={styles.alertHeader}
-            style={{ color: alert.type === "zone_out" ? "var(--zoned-ink)" : "var(--spiral-ink)" }}
-          >
-            <span>{alert.type}</span>
-            <span className={styles.alertMeta}>soft chime</span>
+          <div className={styles.alertHeader} style={{ color: alertMood === "zone_out" ? "var(--zoned-ink)" : "var(--spiral-ink)" }}>
+            <span>{effectiveAlert.type}</span>
+            <span className={styles.alertMeta}>{alertCopy.meta}</span>
           </div>
-          <div className={styles.alertTitle}>{alert.type === "zone_out" ? "Still with it?" : "Winding up a bit?"}</div>
+          <div className={styles.alertTitle}>{alertCopy.title}</div>
           <div className={styles.alertBody}>
-            {alert.reasons.map((r) => r.replace(/_/g, " ")).join(", ")} — sustained {alert.duration_s}s.
+            {effectiveAlert.reasons.map((r) => r.replace(/_/g, " ")).join(", ")} — sustained {effectiveAlert.duration_s}s.
           </div>
           <div className={styles.alertActions}>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setAlert(null)}>
-              {alert.type === "zone_out" ? "Keep going" : "Start the calming loop"}
+            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={dismissAlert}>
+              {alertCopy.primary}
             </button>
-            <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => setAlert(null)}>
-              Take a break
+            <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={dismissAlert}>
+              {alertCopy.secondary}
             </button>
-            <button className={`${styles.btn} ${styles.btnQuiet}`} onClick={() => setAlert(null)}>
+            <button className={`${styles.btn} ${styles.btnQuiet}`} onClick={dismissAlert}>
               Not now
             </button>
+          </div>
+          <div style={{ marginTop: 16, fontSize: 11, color: "var(--mute)", lineHeight: 1.5 }}>
+            Camera-based physiological sensing. Declining is never scored.
           </div>
         </div>
       )}
@@ -580,17 +1137,4 @@ function formatElapsed(s: number): string {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${sec.toString().padStart(2, "0")}`;
-}
-
-function narrativeFor(state: string): string {
-  switch (state) {
-    case "focused":
-      return "You're in it";
-    case "zoned_out":
-      return "Drifting a little";
-    case "spiraling":
-      return "Winding up";
-    default:
-      return readableState(state);
-  }
 }
