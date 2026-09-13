@@ -1,3 +1,8 @@
+@keyframes flow-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* ---- Hero ---- */
 .hero {
   display: grid;
@@ -18,11 +23,14 @@
   line-height: 0.95;
   letter-spacing: -0.052em;
   font-weight: 500;
-  animation: flow-in var(--dur-3) var(--ease) both;
+  animation: flow-in 750ms var(--ease) both;
 }
 .headlineLine {
   display: block;
   white-space: nowrap;
+}
+.brainGone {
+  color: var(--body);
 }
 .lede {
   margin: var(--s6) 0 0;
@@ -31,8 +39,8 @@
   color: var(--body);
   max-width: 44ch;
   text-wrap: pretty;
-  animation: flow-in var(--dur-3) var(--ease) both;
-  animation-delay: 80ms;
+  animation: flow-in 750ms var(--ease) both;
+  animation-delay: 140ms;
 }
 .ctaRow {
   display: flex;
@@ -41,8 +49,15 @@
   gap: var(--s5);
   margin-top: var(--s6);
   flex-wrap: wrap;
-  animation: flow-in var(--dur-3) var(--ease) both;
-  animation-delay: 160ms;
+}
+.ctaRow > a {
+  animation: flow-in 750ms var(--ease) both;
+}
+.ctaRow > a:first-child {
+  animation-delay: 280ms;
+}
+.ctaRow > a:last-child {
+  animation-delay: 400ms;
 }
 .primaryCta {
   position: relative;

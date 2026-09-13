@@ -10,11 +10,12 @@ export default function LandingPage() {
         <div className={styles.heroCopy}>
           <h1 className={styles.h1}>
             <span className={styles.headlineLine}>Eyes on the page,</span>
-            <span className={styles.headlineLine}>brain gone.</span>
+            <span className={`${styles.headlineLine} ${styles.brainGone}`}>brain gone.</span>
           </h1>
           <p className={styles.lede}>
-            Flow reads your pulse, breathing, blinks and gaze from a plain webcam&mdash;then
-            catches the moment you&rsquo;re still looking, but no longer there.
+            Flow is a focus app that watches your pulse, breathing, blinks and gaze
+            through a plain webcam, catching drift in the moment and turning every
+            session into insights on when and why your focus slips.
           </p>
           <div className={styles.ctaRow}>
             <Link href="/session" className={styles.primaryCta}>

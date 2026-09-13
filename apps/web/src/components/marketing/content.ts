@@ -21,22 +21,22 @@ export const features = [
   {
     tag: "01 · sensing",
     title: "Pulse and breathing, no wearable",
-    body: "A plain webcam is enough. Flow reads heart rate, breathing, blink rate and gaze, and shows you the raw waveform — not a score out of ten.",
+    body: "A plain webcam is enough. Flow estimates pulse, breathing, blink rate and gaze, then shows the signal it measured instead of reducing you to a productivity score.",
   },
   {
-    tag: "02 · the hard part",
-    title: "The state nothing else measures",
-    body: "Timers see an open document. Flow sees your pulse fall, blinks collapse and gaze freeze — eyes on the page, brain gone — and names it.",
+    tag: "02 · context",
+    title: "It notices drift, not just time",
+    body: "Flow combines rolling physiology with the active app and window context to distinguish focused work, drifting, spiralling, warmup and missing signal.",
   },
   {
     tag: "03 · in the moment",
-    title: "It intervenes, once, and softly",
-    body: "A chime and a card after ninety seconds of drift. Voice-guided breathing when you are spiralling. Every offer is refusable in one click.",
+    title: "A quiet nudge when it helps",
+    body: "When the evidence is strong enough, Flow can offer a short reset or guided breathing. Every intervention is optional and dismissible in one click.",
   },
   {
     tag: "04 · afterwards",
-    title: "A written account, not a scoreboard",
-    body: "Each session ends in a narrative written from your own signal, a timeline you can read, and an honest record of where the classifier was wrong.",
+    title: "A session you can understand later",
+    body: "Afterward, Flow turns your derived signals and state timeline into a plain-language account, with enough detail to see where its reading may have been wrong.",
   },
 ];
 
@@ -46,39 +46,39 @@ export const principles = [
     body: "Flow says your pulse fell and your blinks collapsed. It does not say you were tired, distracted or failing. The reading is the claim; the meaning is yours.",
   },
   {
-    title: "Offers, not instructions",
-    body: "Every intervention is refusable in one click, and refusing is never counted against you. A coach that is impressed with you every session is not paying attention.",
+    title: "A coach, not a scorekeeper",
+    body: "Flow helps you notice patterns in your own work. It does not rank your day, punish a refusal, or turn attention into a number to optimize.",
   },
   {
     title: "Evidence or silence",
     body: "Below 0.55 confidence Flow keeps reading but stops interrupting, missing data is hatched rather than guessed, and a session without enough signal gets its timeline but no narrative.",
   },
   {
-    title: "Your camera, your machine",
-    body: "No account needed. Flow processes your camera frames locally and never sends the video anywhere — only what it reads off them, numbers and a little text, syncs to your dashboard.",
+    title: "Raw video stays local",
+    body: "The agent processes camera frames on your machine and never uploads the video. Derived measurements and small context fields can sync to the dashboard so sessions are available afterward.",
   },
 ];
 
 export const tech = [
   {
     name: "rPPG sensing",
-    note: "Placeholder — remote photoplethysmography via the Presage SDK, running against the local camera stream.",
+    note: "The local agent uses remote photoplethysmography through the Presage SDK to estimate pulse, breathing and related signal from the camera stream.",
   },
   {
     name: "local agent",
-    note: "Placeholder — a small background process pairs physiology with the active window and app category, and sends only the derived numbers off-device. Frames and video never leave it.",
+    note: "A small background process pairs those measurements with the active window and app category. It sends derived values and context, never camera frames or video.",
   },
   {
     name: "classifier",
-    note: "Placeholder — rules plus a light model over rolling physiology and context windows; emits a state and the reasons behind it.",
+    note: "Rules over rolling physiology and context windows emit states such as focused, zoned out, spiralling, warmup and no signal, along with their evidence.",
   },
   {
     name: "narratives",
-    note: "Placeholder — Gemini writes the post-session account from the session's own derived figures, never from raw frames.",
+    note: "Gemini writes the post-session account from that session's derived figures, events and timeline, never from raw camera frames.",
   },
   {
     name: "storage",
-    note: "Placeholder — session data persists to Tiger Cloud, a managed remote database, keyed to a device id. No account required.",
+    note: "Session data is stored in Tiger Cloud, a managed remote database, and appears in the dashboard without requiring an account or login.",
   },
 ];
 
