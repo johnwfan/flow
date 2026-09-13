@@ -104,7 +104,7 @@ export function DistractionInsights({ insights }: { insights: SessionInsights })
 
       {insights.tips && (
         <div style={{ marginTop: "var(--s5)", borderTop: "2px solid var(--deep)", paddingTop: "var(--s4)" }}>
-          <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--mute)" }}>written for you</div>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--mute)" }}>Gemini tips</div>
           <div style={{ marginTop: 8, fontSize: 15, lineHeight: 1.55, color: "var(--ink)", maxWidth: "62ch" }}>
             {insights.tips}
           </div>

@@ -30,6 +30,7 @@ lpt[1-9].*
 !.env.example
 node_modules/
 .next/
+.next-build/
 dist/
 build/
 __pycache__/

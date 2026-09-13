@@ -113,6 +113,30 @@ export interface DistractionPattern {
   avgMinutesPerEpisode: number;
 }
 
+export interface AiInsightSection {
+  id:
+    | "focus-window"
+    | "focus-by-time"
+    | "effort-by-app"
+    | "refocus-cost"
+    | "time-to-settle"
+    | "breaks-and-interventions"
+    | "validation";
+  title: string;
+  body: string;
+  evidence: string[];
+  recommendation: string;
+  confidence: "low" | "medium" | "high";
+}
+
+export interface AiInsightReport {
+  generatedAt: string;
+  source: "gemini" | "fallback";
+  sessionCount: number;
+  summary: string;
+  sections: AiInsightSection[];
+}
+
 export interface Insights {
   focusWindow: FocusWindow;
   focusByTime: SessionFocusPoint[];
@@ -122,4 +146,5 @@ export interface Insights {
   interventionEfficacy: InterventionEfficacyPoint[];
   validation: ValidationResult;
   distractionPatterns: DistractionPattern[];
+  aiReport: AiInsightReport | null;
 }

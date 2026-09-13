@@ -88,6 +88,43 @@
   line-height: 1.55;
 }
 
+.digestActions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s5);
+}
+
+.regenerateBtn {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--body);
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 7px 13px;
+  cursor: pointer;
+}
+
+.regenerateBtn:hover {
+  color: var(--deep-ink);
+  border-color: var(--deep);
+}
+
+.regenerateBtn:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.digestStamp {
+  color: var(--mute);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
 .digestList {
   border-bottom: 1px solid var(--line-soft);
 }
@@ -134,6 +171,33 @@
   font-size: 17px;
   line-height: 1.6;
   text-wrap: pretty;
+}
+
+.digestEvidence,
+.digestAction,
+.digestConfidence {
+  display: block;
+  max-width: 68ch;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.digestEvidence {
+  margin-top: 10px;
+  color: var(--mute);
+}
+
+.digestAction {
+  margin-top: 7px;
+  color: var(--deep-ink);
+}
+
+.digestConfidence {
+  margin-top: 7px;
+  color: var(--mute);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
 }
 
 .digestArrow {

@@ -7,10 +7,15 @@ interface GenerateOptions {
   fallback: string;
 }
 
-export async function generateText(prompt: string, options: GenerateOptions): Promise<string> {
+export interface GenerateTextResult {
+  text: string;
+  source: "gemini" | "fallback";
+}
+
+export async function generateTextResult(prompt: string, options: GenerateOptions): Promise<GenerateTextResult> {
   const apiKey = process.env["GEMINI_API_KEY"];
   if (!apiKey) {
-    return options.fallback;
+    return { text: options.fallback, source: "fallback" };
   }
 
   const controller = new AbortController();
@@ -35,18 +40,25 @@ export async function generateText(prompt: string, options: GenerateOptions): Pr
     if (!res.ok) {
       const body = await res.text().catch(() => "<unreadable>");
       console.error(`[gemini] request failed: status=${res.status} body=${body.slice(0, 300)}`);
-      return options.fallback;
+      return { text: options.fallback, source: "fallback" };
     }
 
     const data = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return text?.trim() || options.fallback;
+    return text?.trim()
+      ? { text: text.trim(), source: "gemini" }
+      : { text: options.fallback, source: "fallback" };
   } catch (e) {
     console.error(`[gemini] request threw:`, (e as Error).message);
-    return options.fallback;
+    return { text: options.fallback, source: "fallback" };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function generateText(prompt: string, options: GenerateOptions): Promise<string> {
+  const result = await generateTextResult(prompt, options);
+  return result.text;
 }

@@ -7,6 +7,7 @@ import { DistractionPatternChart } from "@/components/insights/DistractionPatter
 import { SettleTrendChart } from "@/components/insights/SettleTrendChart";
 import { BreaksAndInterventions } from "@/components/insights/BreaksAndInterventions";
 import { buildInsightTakeaways } from "@/components/insights/presentation";
+import { RegenerateInsightsButton } from "@/components/insights/RegenerateInsightsButton";
 import { ConfusionMatrix } from "@/components/validation/ConfusionMatrix";
 import { formatDuration, formatPercent } from "@/lib/format";
 import { sessionCount } from "@/lib/patterns";
@@ -55,6 +56,24 @@ export default async function InsightsPage() {
   const sessions = sessionCount(insights);
   const trackedMinutes = insights.effortByCategory.reduce((sum, category) => sum + category.minutes, 0);
   const takeaways = buildInsightTakeaways(insights, sessions);
+  const aiReport = insights.aiReport;
+  const digestItems =
+    aiReport?.sections.map((section) => ({
+      id: section.id,
+      label: section.title,
+      text: section.body,
+      evidence: section.evidence,
+      recommendation: section.recommendation,
+      confidence: section.confidence,
+    })) ??
+    takeaways.map((takeaway) => ({
+      id: takeaway.id,
+      label: takeaway.label,
+      text: takeaway.text,
+      evidence: [],
+      recommendation: "",
+      confidence: null,
+    }));
   const { validation } = insights;
 
   return (
@@ -75,17 +94,45 @@ export default async function InsightsPage() {
 
       <section className={styles.digest} aria-labelledby="digest-title">
         <div className={styles.digestIntro}>
-          <div className={styles.digestEyebrow}>Written for you</div>
-          <h2 id="digest-title">What your sessions are starting to say.</h2>
-          <p>A plain-language reading of the patterns below. Each note links to its evidence.</p>
+          <div className={styles.digestEyebrow}>{aiReport?.source === "gemini" ? "Gemini board" : "Written for you"}</div>
+          <h2 id="digest-title">
+            {aiReport ? "What Gemini sees across your sessions." : "What your sessions are starting to say."}
+          </h2>
+          <p>
+            {aiReport?.summary ??
+              "A plain-language reading of the patterns below. Each note links to its evidence."}
+          </p>
+          <div className={styles.digestActions}>
+            <RegenerateInsightsButton />
+            {aiReport && (
+              <span className={styles.digestStamp}>
+                {aiReport.source} · {aiReport.sessionCount} sessions ·{" "}
+                {new Date(aiReport.generatedAt).toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </span>
+            )}
+          </div>
         </div>
         <div className={styles.digestList}>
-          {takeaways.map((takeaway, index) => (
-            <a key={takeaway.id} href={`#${takeaway.id}`} className={styles.digestItem}>
+          {digestItems.map((takeaway, index) => (
+            <a key={`${takeaway.id}-${index}`} href={`#${takeaway.id}`} className={styles.digestItem}>
               <span className={styles.digestIndex}>{String(index + 1).padStart(2, "0")}</span>
               <span>
                 <span className={styles.digestLabel}>{takeaway.label}</span>
                 <span className={styles.digestText}>{takeaway.text}</span>
+                {takeaway.evidence.length > 0 && (
+                  <span className={styles.digestEvidence}>{takeaway.evidence.join(" · ")}</span>
+                )}
+                {takeaway.recommendation && (
+                  <span className={styles.digestAction}>{takeaway.recommendation}</span>
+                )}
+                {takeaway.confidence && (
+                  <span className={styles.digestConfidence}>confidence: {takeaway.confidence}</span>
+                )}
               </span>
               <span className={styles.digestArrow} aria-hidden="true">
                 ↘

@@ -124,4 +124,23 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
 
     return { sessionId, durationS: summary.durationS, narrative, tips };
   });
+
+  app.post<{ Params: { id: string } }>("/v1/sessions/:id/regenerate", async (request, reply) => {
+    const sessionId = request.params.id;
+
+    await refreshSampleRollups(app);
+
+    const summary = await getSessionSummary(app.pg, sessionId);
+    if (!summary) {
+      return reply.code(404).send({ error: "session not found" });
+    }
+
+    const distraction = await computeDistractionStats(app.pg, sessionId, summary.stateRibbon);
+    const [narrative, tips] = await Promise.all([
+      generateAndStoreNarrative(app.pg, sessionId, summary),
+      generateAndStoreTips(app.pg, sessionId, summary, distraction),
+    ]);
+
+    return { sessionId, narrative, tips };
+  });
 }

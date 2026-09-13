@@ -4,6 +4,7 @@ import { getSession } from "@/lib/api";
 import { RuleGridSection } from "@/components/ui/RuleGridSection";
 import { SessionDetailHeader } from "@/components/session-detail/SessionDetailHeader";
 import { NarrativeBlock } from "@/components/session-detail/NarrativeBlock";
+import { RegenerateSessionInsightsButton } from "@/components/session-detail/RegenerateSessionInsightsButton";
 import { DistractionInsights } from "@/components/session-detail/DistractionInsights";
 import { SessionTrace } from "@/components/session-detail/SessionTrace";
 import { CheckInsList } from "@/components/session-detail/CheckInsList";
@@ -47,7 +48,10 @@ export default async function SessionDetailPage({ params }: { params: { id: stri
         description="Written for you from this session's own signal."
         style={{ marginTop: "var(--s6)" }}
       >
-        <NarrativeBlock narrative={summary.narrative} ribbon={summary.stateRibbon} insights={insights} />
+        <div style={{ display: "grid", gap: "var(--s5)" }}>
+          <RegenerateSessionInsightsButton sessionId={summary.id} />
+          <NarrativeBlock narrative={summary.narrative} ribbon={summary.stateRibbon} insights={insights} />
+        </div>
       </RuleGridSection>
 
       <RuleGridSection title="What pulled you away" description="Where the session's attention went, and for how long.">
