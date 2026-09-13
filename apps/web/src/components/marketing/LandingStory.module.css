@@ -1,0 +1,490 @@
+.story {
+  --story-stage-height: calc(100svh - var(--marketing-nav-height, 66px));
+  position: relative;
+  isolation: isolate;
+}
+
+.stage {
+  position: sticky;
+  top: var(--marketing-nav-height, 66px);
+  z-index: 2;
+  height: var(--story-stage-height);
+  padding: 18px 0 22px;
+}
+
+.canvas {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: clamp(20px, 3vw, 40px);
+  border: 1px solid var(--line);
+  border-radius: clamp(18px, 2.2vw, var(--r-xl));
+  background:
+    radial-gradient(circle at 84% 10%, oklch(0.92 0.035 258 / 0.55), transparent 29%),
+    linear-gradient(135deg, oklch(1 0 0 / 0.96), oklch(0.975 0 0 / 0.98));
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0),
+    0 1px 0 oklch(0.22 0 0 / 0.04),
+    0 28px 70px oklch(0.22 0 0 / 0.09);
+}
+
+.canvas::before,
+.canvas::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.canvas::before {
+  inset: 0;
+  opacity: 0.3;
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 48%);
+}
+
+.canvas::after {
+  width: 280px;
+  height: 280px;
+  right: -120px;
+  bottom: -150px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+
+.progress {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 2vw, 28px);
+  padding-bottom: clamp(18px, 3vh, 30px);
+}
+
+.progressStep {
+  min-width: 0;
+  color: var(--mute);
+  transition: color var(--dur-2) var(--ease);
+}
+
+.progressStep:hover,
+.progressStep:focus-visible,
+.progressStep[aria-current="step"] {
+  color: var(--ink);
+}
+
+.progressStep:focus-visible {
+  outline: 2px solid var(--deep);
+  outline-offset: 5px;
+  border-radius: 2px;
+}
+
+.progressMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.progressMeta span:first-child {
+  opacity: 0.58;
+}
+
+.progressTrack {
+  display: block;
+  height: 2px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.progressFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--indigo);
+  transform: scaleX(var(--step-progress));
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.panelViewport {
+  position: relative;
+  z-index: 2;
+  min-height: 0;
+  perspective: 1300px;
+}
+
+.panel {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(175px, 0.31fr) minmax(0, 1fr);
+  gap: clamp(28px, 5vw, 72px);
+  align-items: start;
+  padding: clamp(12px, 3vh, 34px) clamp(2px, 0.5vw, 8px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+  backface-visibility: hidden;
+  transform-origin: center center;
+  transition:
+    opacity 520ms var(--ease),
+    transform 650ms var(--ease),
+    filter 520ms var(--ease),
+    visibility 0s linear 650ms;
+}
+
+.panel[data-state="active"] {
+  z-index: 3;
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) rotateX(0) scale(1);
+  filter: blur(0);
+  transition-delay: 0s;
+}
+
+.panel[data-state="past"] {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-9%) rotateX(5deg) scale(0.985);
+  filter: blur(5px);
+}
+
+.panel[data-state="future"] {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(9%) rotateX(-5deg) scale(0.985);
+  filter: blur(5px);
+}
+
+.panelHeading {
+  position: sticky;
+  top: 0;
+}
+
+.kicker,
+.featureTag {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mute);
+}
+
+.kicker {
+  font-size: 10px;
+}
+
+.panelHeading h2 {
+  margin: 15px 0 0;
+  font-size: clamp(38px, 5vw, 66px);
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+  font-weight: 500;
+}
+
+.panelHeading > p {
+  margin: 18px 0 0;
+  max-width: 22ch;
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.story[data-visible="true"] .panel[data-state="active"] .reveal {
+  animation: story-reveal 540ms var(--ease) forwards;
+}
+
+.story[data-visible="true"] .panel[data-state="active"] .reveal:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+@keyframes story-reveal {
+  from {
+    transform: translateY(16px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(14px, 2.4vw, 28px);
+}
+
+.featureCard {
+  padding: clamp(16px, 2vw, 24px);
+  border-top: 1px solid var(--line);
+  background: linear-gradient(to bottom, oklch(1 0 0 / 0.7), transparent);
+}
+
+.featureTag {
+  font-size: 9.5px;
+}
+
+.featureCard h3,
+.principleRow h3,
+.techRow h3 {
+  margin: 12px 0 0;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.featureCard p,
+.principleRow p,
+.techRow p,
+.techFoot {
+  margin: 8px 0 0;
+  color: var(--body);
+  font-size: 13px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.aboutLede {
+  margin: 0;
+  max-width: 31ch;
+  font-size: clamp(20px, 2.4vw, 30px);
+  font-weight: 500;
+  line-height: 1.27;
+  letter-spacing: -0.035em;
+  text-wrap: pretty;
+}
+
+.principleList {
+  margin-top: clamp(20px, 3vh, 34px);
+}
+
+.principleRow,
+.techRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.32fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: clamp(11px, 1.7vh, 18px) 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.principleRow h3,
+.techRow h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.principleRow p,
+.techRow p {
+  margin: 0;
+  max-width: 58ch;
+}
+
+.techRow h3 {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+
+.techFoot {
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--mute);
+  font-size: 11px;
+}
+
+.faqWrap {
+  min-width: 0;
+}
+
+.scrollCue {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 15px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--mute);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.milestones {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+}
+
+.milestone,
+.scrollStep {
+  height: var(--story-stage-height);
+}
+
+.anchor {
+  display: block;
+  scroll-margin-top: var(--marketing-nav-height, 66px);
+}
+
+.scrollSpace {
+  position: relative;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .stage {
+    padding: 10px 0 14px;
+  }
+
+  .canvas {
+    padding: 18px;
+  }
+
+  .progress {
+    gap: 9px;
+    padding-bottom: 14px;
+  }
+
+  .progressMeta {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 8.5px;
+  }
+
+  .progressMeta span:first-child {
+    display: none;
+  }
+
+  .panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    padding: 8px 1px 16px;
+  }
+
+  .panelHeading {
+    position: static;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 4px 16px;
+  }
+
+  .kicker {
+    grid-column: 1 / -1;
+  }
+
+  .panelHeading h2 {
+    margin-top: 4px;
+    font-size: clamp(31px, 10vw, 44px);
+  }
+
+  .panelHeading > p {
+    margin: 0;
+    max-width: 26ch;
+    font-size: 11px;
+    text-align: right;
+  }
+
+  .featureGrid {
+    gap: 10px;
+  }
+
+  .featureCard {
+    padding: 12px;
+  }
+
+  .featureCard h3 {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+
+  .featureCard p {
+    font-size: 11.5px;
+    line-height: 1.42;
+  }
+
+  .aboutLede {
+    font-size: 19px;
+  }
+
+  .principleList {
+    margin-top: 14px;
+  }
+
+  .principleRow,
+  .techRow {
+    grid-template-columns: minmax(105px, 0.36fr) minmax(0, 1fr);
+    gap: 14px;
+    padding: 10px 0;
+  }
+
+  .principleRow h3 {
+    font-size: 12px;
+  }
+
+  .principleRow p,
+  .techRow p {
+    font-size: 11.5px;
+    line-height: 1.42;
+  }
+
+  .scrollCue {
+    padding-top: 9px;
+  }
+}
+
+@media (max-width: 430px) {
+  .featureTag {
+    font-size: 8px;
+  }
+
+  .featureCard h3 {
+    font-size: 13px;
+  }
+}
+
+@media (max-height: 620px) {
+  .canvas {
+    padding-top: 14px;
+    padding-bottom: 12px;
+  }
+
+  .progress {
+    padding-bottom: 10px;
+  }
+
+  .panel {
+    padding-top: 5px;
+  }
+
+  .scrollCue {
+    padding-top: 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: none;
+    filter: none !important;
+  }
+
+  .story[data-visible="true"] .panel[data-state="active"] .reveal {
+    transform: none;
+    animation: none;
+  }
+}

@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { Section } from "@/components/marketing/Section";
 import { HeroCard } from "@/components/marketing/HeroCard";
-import { FaqAccordion } from "@/components/marketing/FaqAccordion";
-import { heroStats, features, principles, tech, faqs } from "@/components/marketing/content";
+import { LandingStory } from "@/components/marketing/LandingStory";
+import { heroStats } from "@/components/marketing/content";
 import styles from "./page.module.css";
 
 export default function LandingPage() {
@@ -41,52 +40,7 @@ export default function LandingPage() {
         <HeroCard />
       </div>
 
-      <Section id="features" title="Features" description="Four things Flow does, and nothing it doesn't.">
-        <div className={styles.featureGrid}>
-          {features.map((f) => (
-            <div key={f.title}>
-              <div className={styles.featureTag}>{f.tag}</div>
-              <div className={styles.featureTitle}>{f.title}</div>
-              <div className={styles.featureBody}>{f.body}</div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section id="about" title="About" description="Why it behaves the way it does.">
-        <div>
-          <div className={styles.aboutLede}>
-            Flow is a personal instrument, not a productivity score. It reports what the
-            camera measured and leaves the judgement to you.
-          </div>
-          <div className={styles.principleList}>
-            {principles.map((p) => (
-              <div key={p.title} className={styles.principleRow}>
-                <span className={styles.principleTitle}>{p.title}</span>
-                <span className={styles.principleBody}>{p.body}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
-
-      <Section id="tech" title="Tech" description="Placeholder — swap in the real stack before launch.">
-        <div>
-          {tech.map((t) => (
-            <div key={t.name} className={styles.techRow}>
-              <span className={styles.techName}>{t.name}</span>
-              <span className={styles.techNote}>{t.note}</span>
-            </div>
-          ))}
-          <div className={styles.techFoot}>
-            Placeholder copy. Versions, model names and latency figures to be confirmed.
-          </div>
-        </div>
-      </Section>
-
-      <Section id="faq" title="FAQ" description="The questions people actually ask first.">
-        <FaqAccordion faqs={faqs} />
-      </Section>
+      <LandingStory />
 
       <div className={styles.closing}>
         <div>
