@@ -1,0 +1,13 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: var(--s5);
+  padding: var(--s4) var(--s3);
+  margin: 0 calc(var(--s3) * -1);
+  border-top: 1px solid var(--line-soft);
+  transition: background var(--dur-1) var(--ease);
+}
+
+.row:hover {
+  background: var(--sink);
+}

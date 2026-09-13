@@ -1,59 +1,80 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/api";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { StatTile } from "@/components/ui/StatTile";
+import { RuleGridSection } from "@/components/ui/RuleGridSection";
+import { SessionDetailHeader } from "@/components/session-detail/SessionDetailHeader";
 import { NarrativeBlock } from "@/components/session-detail/NarrativeBlock";
-import { PhysioTimeline } from "@/components/session-detail/PhysioTimeline";
-import { CategoryRibbon } from "@/components/session-detail/CategoryRibbon";
-import { AlertsList } from "@/components/session-detail/AlertsList";
-import { ProbeComparisonTable } from "@/components/session-detail/ProbeComparisonTable";
 import { DistractionInsights } from "@/components/session-detail/DistractionInsights";
-import { formatDate, formatDuration } from "@/lib/format";
+import { SessionTrace } from "@/components/session-detail/SessionTrace";
+import { CheckInsList } from "@/components/session-detail/CheckInsList";
+import { InterventionsList } from "@/components/session-detail/InterventionsList";
+import { sessionAgreement, settleSeconds } from "@/lib/sessionMetrics";
 
 export default async function SessionDetailPage({ params }: { params: { id: string } }) {
   const detail = await getSession(params.id);
   if (!detail) notFound();
 
   const { summary, timeline, alerts, contexts, probes, insights } = detail;
+  const settleSecs = settleSeconds(summary.stateRibbon);
+  const { pct: agreementPct } = sessionAgreement(probes);
 
   return (
     <>
-      <PageHeader title={formatDate(summary.startedAt)} subtitle="Session detail" />
+      <Link
+        href="/dashboard"
+        style={{
+          display: "inline-block",
+          padding: "6px 13px",
+          margin: "0 0 var(--s5) -12px",
+          borderRadius: "var(--r-pill)",
+          background: "transparent",
+          color: "var(--body)",
+          fontSize: 12.5,
+        }}
+      >
+        &larr; All sessions
+      </Link>
 
-      <div className="space-y-6">
-        <NarrativeBlock narrative={summary.narrative} />
+      <SessionDetailHeader
+        summary={summary}
+        settleSecs={settleSecs}
+        agreementPct={agreementPct}
+        distractionPct={insights.distractionPct}
+      />
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Duration" value={formatDuration(summary.durationS)} />
-          <StatTile label="Focus time" value={formatDuration(summary.focusTimeS)} />
-          <StatTile label="Alerts" value={String(alerts.length)} />
-          <StatTile label="Probes answered" value={String(probes.length)} />
-        </div>
+      <RuleGridSection
+        title="What happened"
+        description="Written for you from this session's own signal."
+        style={{ marginTop: "var(--s6)" }}
+      >
+        <NarrativeBlock narrative={summary.narrative} ribbon={summary.stateRibbon} insights={insights} />
+      </RuleGridSection>
 
-        <Card>
-          <h3 className="mb-4 text-base font-semibold text-ink">Physiology timeline</h3>
-          <PhysioTimeline timeline={timeline} alerts={alerts} />
-          <div className="mt-4">
-            <CategoryRibbon contexts={contexts} startedAt={summary.startedAt} endedAt={summary.endedAt} />
-          </div>
-        </Card>
+      <RuleGridSection title="What pulled you away" description="Where the session's attention went, and for how long.">
+        <DistractionInsights insights={insights} />
+      </RuleGridSection>
 
-        <Card>
-          <h3 className="mb-3 text-base font-semibold text-ink">Distraction insights</h3>
-          <DistractionInsights insights={insights} />
-        </Card>
+      <RuleGridSection
+        title="How it went"
+        description="States over the physiology, alerts where they fired, apps underneath."
+      >
+        <SessionTrace
+          ribbon={summary.stateRibbon}
+          timeline={timeline}
+          alerts={alerts}
+          contexts={contexts}
+          startedAt={summary.startedAt}
+          endedAt={summary.endedAt}
+        />
+      </RuleGridSection>
 
-        <Card>
-          <h3 className="mb-3 text-base font-semibold text-ink">Alerts</h3>
-          <AlertsList alerts={alerts} />
-        </Card>
+      <RuleGridSection title="Check-ins" description="What you said, against what the classifier thought at that moment.">
+        <CheckInsList probes={probes} />
+      </RuleGridSection>
 
-        <Card>
-          <h3 className="mb-3 text-base font-semibold text-ink">Thought probes</h3>
-          <ProbeComparisonTable probes={probes} />
-        </Card>
-      </div>
+      <RuleGridSection title="When Flow stepped in" description="What changed after each moment Flow spoke up.">
+        <InterventionsList alerts={alerts} timeline={timeline} distractionWindows={insights.distractionWindows} />
+      </RuleGridSection>
     </>
   );
 }

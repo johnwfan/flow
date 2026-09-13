@@ -1,5 +1,6 @@
 import type { EventRow } from "@/types/api";
-import { categoryColor, categoryLabel } from "@/lib/colors";
+import { categoryLabel } from "@/lib/colors";
+import { categoryVar } from "@/lib/stateVisuals";
 
 interface Segment {
   category: string;
@@ -22,6 +23,11 @@ function buildSegments(contexts: EventRow[], startedAt: string, endedAt: string 
   return segments;
 }
 
+/**
+ * The 6px app-category ribbon beneath the state ribbon and HR trace.
+ * Categories are always indigo tints — flat, no texture — so they can
+ * never be confused with a state colour (design README "Charts").
+ */
 export function CategoryRibbon({
   contexts,
   startedAt,
@@ -38,17 +44,20 @@ export function CategoryRibbon({
   if (total === 0) return null;
 
   return (
-    <div>
-      <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">App category</div>
-      <div className="flex h-3 w-full overflow-hidden rounded-full">
-        {segments.map((segment, i) => (
-          <div
-            key={i}
-            title={`${categoryLabel(segment.category)} — ${Math.round(segment.durationS / 60)}m`}
-            style={{ width: `${(segment.durationS / total) * 100}%`, backgroundColor: categoryColor(segment.category) }}
-          />
-        ))}
-      </div>
+    <div
+      style={{ display: "flex", gap: 3, height: 6, borderRadius: "var(--r-pill)", overflow: "hidden" }}
+      role="img"
+      aria-label={`App category over time: ${segments.map((s) => categoryLabel(s.category)).join(", ")}`}
+    >
+      {segments.map((segment, i) => (
+        <span
+          key={i}
+          style={{
+            flex: Math.max(segment.durationS, 1),
+            background: categoryVar(segment.category),
+          }}
+        />
+      ))}
     </div>
   );
 }
