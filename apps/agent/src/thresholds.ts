@@ -14,6 +14,7 @@ export interface ZoneOutThresholds {
 
 export interface SpiralThresholds {
   hr_elevation_bpm: number;
+  breathing_high_rpm: number;
   hrv_drop_fraction: number;
   eda_rise_fraction: number;
   sustain_s: number;
@@ -87,6 +88,7 @@ function getDefaults(): Thresholds {
     },
     spiral: {
       hr_elevation_bpm: 10,
+      breathing_high_rpm: 20,
       hrv_drop_fraction: 0.2,
       eda_rise_fraction: 0.3,
       sustain_s: 30,

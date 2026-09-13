@@ -150,7 +150,7 @@ function narrativeFor(state: string): string {
 // Only the state badge/headline/reasons and the physiology readouts +
 // plots are swapped to placeholder numbers while previewing -- the same
 // realistic placeholder values the reference prototype and its README use
-// (resting HR 55-85 bpm, HRV 46-112 ms, breathing 12-20/min).
+// (resting HR 55-85 bpm, HRV 46-112 ms, breathing 12-21/min).
 type PreviewKey = "focused" | "zoned" | "spiral" | "break" | "warmup" | "lost";
 
 const PREVIEW_OPTIONS: { key: PreviewKey; label: string }[] = [
@@ -188,10 +188,10 @@ const PREVIEW_TARGETS: Record<
     machine: "spiraling",
     hr: 81,
     hrv: 48,
-    br: 18.6,
+    br: 21.2,
     blink: 21,
     conf: 0.83,
-    reasons: ["HR up 81", "I:E 1 : 1.1", "blink 21 /min", "gaze off-task 39%", "4 switches 3m"],
+    reasons: ["HR up 81", "breathing 21 /min", "blink 21 /min", "gaze off-task 39%", "4 switches 3m"],
   },
   break: { machine: "break", hr: 67, hrv: 84, br: 14.2, blink: 17, conf: 0.74, reasons: [] },
   warmup: { machine: "warmup", hr: 64, hrv: 74, br: 13.4, blink: 16, conf: 0.52, reasons: [] },
@@ -210,8 +210,38 @@ const ALERT_COPY: Record<"zone_out" | "spiral", { meta: string; title: string; p
 
 const DEMO_ALERT: Record<"zone_out" | "spiral", AlertMessage> = {
   zone_out: { kind: "alert", type: "zone_out", reasons: ["pulse_down_six", "blinks_down_to_four", "gaze_parked"], ts: 0, duration_s: 90 },
-  spiral: { kind: "alert", type: "spiral", reasons: ["breathing_up_to_nineteen", "climbing_four_minutes"], ts: 0, duration_s: 240 },
+  spiral: { kind: "alert", type: "spiral", reasons: ["breathing_above_twenty", "climbing_four_minutes"], ts: 0, duration_s: 240 },
 };
+
+const HIGH_BREATHING_RPM = 20;
+const HIGH_BREATHING_CLEAR_RPM = 18;
+const HIGH_BREATHING_ALERT_COOLDOWN_MS = 45_000;
+const BREATHING_EXERCISE_MS = 2 * 60 * 1000;
+
+const BREATHING_RHYTHMS = {
+  reset: {
+    title: "Two-minute reset",
+    lead: "Follow the circle until your attention has somewhere simple to land.",
+    inhaleMs: 4000,
+    exhaleMs: 4000,
+  },
+  calm: {
+    title: "Slow the breathing loop",
+    lead: "Longer exhales nudge the system down without asking you to think about it.",
+    inhaleMs: 4000,
+    exhaleMs: 6000,
+  },
+} as const;
+
+type BreathingExerciseMode = keyof typeof BREATHING_RHYTHMS;
+type BreathingExerciseSource = "alert" | "high_breathing";
+
+interface BreathingExerciseRequest {
+  mode: BreathingExerciseMode;
+  source: BreathingExerciseSource;
+  measuredRpm: number | null;
+  startedAt: number;
+}
 
 interface RollingSeries {
   values: (number | null)[];
@@ -520,18 +550,20 @@ function Sparkline({ series, color, height, ariaLabel }: { series: RollingSeries
 // from the reported I:E ratio: close to 1:1 reads as the symmetric
 // "upregulate" reset, a longer exhale reads as the "extended exhale" spiral
 // pacer -- the contract has no explicit "kind" field to read instead.
-function BreathingPacer({ guide }: { guide: BreathingGuideMessage }) {
+function BreathingPacer({ guide, size = "compact" }: { guide: BreathingGuideMessage; size?: "compact" | "large" }) {
   const reducedMotion = usePrefersReducedMotion();
   const kind: "upregulate" | "extended-exhale" = guide.ie_ratio > 1.3 ? "extended-exhale" : "upregulate";
   const isInhale = guide.phase !== "exhale";
   const color = kind === "extended-exhale" ? "var(--spiral)" : "var(--zoned)";
   const seconds = Math.max(1, Math.round(guide.duration_ms / 1000));
   const label = `${guide.phase === "exhale" ? "out" : "in"} ${seconds}`;
+  const scale = size === "large" ? 2.15 : 1;
 
-  const coreSize = kind === "upregulate" ? (isInhale ? 97 : 36) : isInhale ? 92 : 48;
+  const baseCoreSize = kind === "upregulate" ? (isInhale ? 97 : 36) : isInhale ? 92 : 48;
+  const coreSize = Math.round(baseCoreSize * scale);
 
   return (
-    <div className={styles.pacerWrap} data-kind={kind}>
+    <div className={styles.pacerWrap} data-kind={kind} data-size={size}>
       {!reducedMotion && kind === "upregulate" && (
         <>
           <span className={styles.pacerGhost} aria-hidden="true" />
@@ -554,6 +586,127 @@ function BreathingPacer({ guide }: { guide: BreathingGuideMessage }) {
   );
 }
 
+function formatRemaining(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}:${rem.toString().padStart(2, "0")}`;
+}
+
+function BreathingExerciseWidget({
+  request,
+  liveGuide,
+  onClose,
+}: {
+  request: BreathingExerciseRequest;
+  liveGuide: BreathingGuideMessage | null;
+  onClose: () => void;
+}) {
+  const rhythm = BREATHING_RHYTHMS[request.mode];
+  const [phase, setPhase] = useState<"inhale" | "exhale">("inhale");
+  const [remainingMs, setRemainingMs] = useState<number>(BREATHING_EXERCISE_MS);
+  const [phaseRemainingMs, setPhaseRemainingMs] = useState<number>(rhythm.inhaleMs);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let phaseTimer: ReturnType<typeof setTimeout> | null = null;
+    let tickTimer: ReturnType<typeof setInterval> | null = null;
+    let phaseEndsAt = Date.now();
+    const endAt = Date.now() + BREATHING_EXERCISE_MS;
+
+    const clearTimers = () => {
+      if (phaseTimer) clearTimeout(phaseTimer);
+      if (tickTimer) clearInterval(tickTimer);
+      phaseTimer = null;
+      tickTimer = null;
+    };
+
+    const runPhase = (next: "inhale" | "exhale") => {
+      const remaining = endAt - Date.now();
+      if (remaining <= 0) {
+        clearTimers();
+        setDone(true);
+        setRemainingMs(0);
+        setPhaseRemainingMs(0);
+        return;
+      }
+      const duration = next === "inhale" ? rhythm.inhaleMs : rhythm.exhaleMs;
+      setPhase(next);
+      phaseEndsAt = Date.now() + Math.min(duration, remaining);
+      setPhaseRemainingMs(Math.max(0, phaseEndsAt - Date.now()));
+      phaseTimer = setTimeout(() => runPhase(next === "inhale" ? "exhale" : "inhale"), Math.min(duration, remaining));
+    };
+
+    setDone(false);
+    setRemainingMs(BREATHING_EXERCISE_MS);
+    runPhase("inhale");
+    tickTimer = setInterval(() => {
+      const remaining = Math.max(0, endAt - Date.now());
+      setRemainingMs(remaining);
+      setPhaseRemainingMs(Math.max(0, phaseEndsAt - Date.now()));
+      if (remaining <= 0) {
+        clearTimers();
+        setDone(true);
+      }
+    }, 250);
+
+    return clearTimers;
+  }, [request.startedAt, rhythm.exhaleMs, rhythm.inhaleMs]);
+
+  const currentDuration = phase === "inhale" ? rhythm.inhaleMs : rhythm.exhaleMs;
+  const displayGuide: BreathingGuideMessage = {
+    kind: "breathing_guide",
+    phase,
+    duration_ms: currentDuration,
+    measured_rpm: liveGuide?.measured_rpm ?? request.measuredRpm ?? 0,
+    ie_ratio: rhythm.exhaleMs / rhythm.inhaleMs,
+  };
+  const phaseLabel = phase === "inhale" ? "Breathe in" : "Breathe out";
+  const sourceLabel = request.source === "high_breathing" ? "breathing above 20/min" : "intervention";
+
+  return (
+    <div className={styles.breathingBackdrop} role="presentation">
+      <section
+        className={styles.breathingWidget}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="breathing-widget-title"
+      >
+        <div className={styles.breathingTop}>
+          <div>
+            <div className={styles.breathingKicker}>{sourceLabel}</div>
+            <h2 id="breathing-widget-title" className={styles.breathingTitle}>
+              {done ? "Nice work" : rhythm.title}
+            </h2>
+          </div>
+          <button className={`${styles.btn} ${styles.btnQuiet} ${styles.breathingClose}`} onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <p className={styles.breathingLead}>{done ? "The loop is complete." : rhythm.lead}</p>
+        <div className={styles.breathingCenter}>
+          <BreathingPacer guide={displayGuide} size="large" />
+          <div className={styles.breathingReadout}>
+            <div className={styles.breathingPhase}>{done ? "Complete" : phaseLabel}</div>
+            <div className={`${styles.breathingTimer} ${styles.num}`}>{formatRemaining(remainingMs)}</div>
+            {!done && (
+              <div className={`${styles.breathingSubtimer} ${styles.num}`}>
+                {Math.ceil(phaseRemainingMs / 1000)}s on this breath
+              </div>
+            )}
+          </div>
+        </div>
+        <div className={styles.breathingFooter}>
+          <span className={styles.breathingMetric}>
+            measured {displayGuide.measured_rpm > 0 ? displayGuide.measured_rpm.toFixed(1) : "--"} /min
+          </span>
+          <span className={styles.breathingMetric}>I:E 1 : {displayGuide.ie_ratio.toFixed(1)}</span>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function SessionPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
@@ -572,9 +725,17 @@ export default function SessionPage() {
   const [blinkDetected, setBlinkDetected] = useState<DetectionStatus | null>(null);
   const [appContext, setAppContext] = useState<{ app_title: string; category: string } | null>(null);
   const [alert, setAlert] = useState<AlertMessage | null>(null);
+  const alertRef = useRef<AlertMessage | null>(null);
+  alertRef.current = alert;
   const [guide, setGuide] = useState<BreathingGuideMessage | null>(null);
   const [probe, setProbe] = useState<ThoughtProbeMessage | null>(null);
   const [probeSecondsLeft, setProbeSecondsLeft] = useState(20);
+  const stateRef = useRef<typeof state>(null);
+  stateRef.current = state;
+  const breathingRef = useRef<number | null>(null);
+  breathingRef.current = breathing;
+  const highBreathingAlertRef = useRef({ armed: true, lastAt: 0 });
+  const [breathingExercise, setBreathingExercise] = useState<BreathingExerciseRequest | null>(null);
   const [elapsedS, setElapsedS] = useState(0);
   const startedAtRef = useRef<number | null>(null);
   const [validationHint, setValidationHint] = useState<string | null>(null);
@@ -631,15 +792,49 @@ export default function SessionPage() {
         target?.tagName === "TEXTAREA" ||
         target?.tagName === "SELECT" ||
         target?.isContentEditable;
-      if (isTyping || e.altKey || e.ctrlKey || e.metaKey || e.key.toLowerCase() !== "h") return;
+      if (isTyping || e.altKey || e.ctrlKey || e.metaKey) return;
 
-      e.preventDefault();
-      setDemoUiHidden((hidden) => !hidden);
+      const key = e.key.toLowerCase();
+      if (key === "h") {
+        e.preventDefault();
+        setDemoUiHidden((hidden) => !hidden);
+      } else if (key === "c") {
+        e.preventDefault();
+        const chimeType =
+          alertRef.current?.type ??
+          (stateRef.current?.state === State.Spiraling || (breathingRef.current ?? 0) > HIGH_BREATHING_RPM ? "spiral" : "zone_out");
+        void playChime(chimeType);
+      }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  function maybeNotifyHighBreathing(rpm: number, ts: number) {
+    const tracker = highBreathingAlertRef.current;
+    if (previewStateRef.current || phaseRef.current === "idle" || phaseRef.current === "ended") return;
+    if ((smoothedRef.current.conf ?? 1) < 0.55) return;
+
+    if (rpm <= HIGH_BREATHING_CLEAR_RPM) {
+      tracker.armed = true;
+      return;
+    }
+
+    if (rpm <= HIGH_BREATHING_RPM || !tracker.armed || ts - tracker.lastAt < HIGH_BREATHING_ALERT_COOLDOWN_MS) return;
+
+    tracker.armed = false;
+    tracker.lastAt = ts;
+    const msg: AlertMessage = {
+      kind: "alert",
+      type: "spiral",
+      reasons: [`breathing ${rpm.toFixed(1)} per min`, "above 20 per min"],
+      ts,
+      duration_s: 0,
+    };
+    setAlert(msg);
+    void playChime("spiral");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -694,6 +889,7 @@ export default function SessionPage() {
                 lastGoodRef.current.hrv = t;
               }
               if (msg.conf != null) sm.conf = ema(sm.conf, msg.conf, CONF_ALPHA);
+              if (sm.breathing != null) maybeNotifyHighBreathing(sm.breathing, t);
               pushPulse(sm.pulse);
               pushBreath(sm.breathing);
               pushHrv(sm.hrv);
@@ -725,7 +921,7 @@ export default function SessionPage() {
             break;
           case "alert":
             setAlert(msg);
-            playChime(msg.type);
+            void playChime(msg.type);
             break;
           case "app_context":
             setAppContext({ app_title: msg.app_title, category: msg.category });
@@ -869,6 +1065,7 @@ export default function SessionPage() {
   function send(action: "start" | "end" | "pause" | "resume") {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (action === "start" || action === "resume") void primeChime();
     const id = action === "start" ? crypto.randomUUID() : (sessionId ?? crypto.randomUUID());
     ws.send(JSON.stringify({ kind: "session_control", action, session_id: id, ts: Date.now() }));
     if (action === "start") {
@@ -885,6 +1082,7 @@ export default function SessionPage() {
       // meant to avoid.
       smoothedRef.current = { pulse: null, breathing: null, hrv: null, eda: null, conf: null };
       lastGoodRef.current = { pulse: null, breathing: null, hrv: null, eda: null };
+      highBreathingAlertRef.current = { armed: true, lastAt: 0 };
       uiUpdateAtRef.current = 0;
       setPulse(null);
       setBreathing(null);
@@ -897,6 +1095,9 @@ export default function SessionPage() {
       setSessionId(null);
       setState(null);
       setAlert(null);
+      setGuide(null);
+      setBreathingExercise(null);
+      highBreathingAlertRef.current = { armed: true, lastAt: 0 };
       setCameraRefused(null);
       stopPreview();
     } else {
@@ -1048,6 +1249,17 @@ export default function SessionPage() {
     setPreviewAlertOn(false);
   }
 
+  function startBreathingExerciseFromAlert() {
+    const source: BreathingExerciseSource = effectiveAlert?.reasons.some((reason) => reason.includes("breathing")) ? "high_breathing" : "alert";
+    setBreathingExercise({
+      mode: alertMood === "spiral" ? "calm" : "reset",
+      source,
+      measuredRpm: breathingRef.current ?? guide?.measured_rpm ?? null,
+      startedAt: Date.now(),
+    });
+    dismissAlert();
+  }
+
   // Roving-tabindex radiogroup for the preview-state segmented control, per
   // the handoff's accessibility spec (Arrow/Home/End move focus with
   // selection).
@@ -1149,7 +1361,7 @@ export default function SessionPage() {
                         // (that's the only place playChime() is normally called), so fire
                         // it here directly -- otherwise "Preview intervention" shows the
                         // card silently, which looks exactly like a broken chime.
-                        if (next) playChime(state?.state === "spiraling" ? "spiral" : "zone_out");
+                        if (next) void playChime(state?.state === "spiraling" ? "spiral" : "zone_out");
                         return next;
                       })
                     }
@@ -1475,10 +1687,11 @@ export default function SessionPage() {
           </div>
           <div className={styles.alertTitle}>{alertCopy.title}</div>
           <div className={styles.alertBody}>
-            {effectiveAlert.reasons.map((r) => r.replace(/_/g, " ")).join(", ")} — sustained {effectiveAlert.duration_s}s.
+            {effectiveAlert.reasons.map((r) => r.replace(/_/g, " ")).join(", ")}
+            {effectiveAlert.duration_s > 0 ? ` - sustained ${effectiveAlert.duration_s}s.` : "."}
           </div>
           <div className={styles.alertActions}>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={dismissAlert}>
+            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={startBreathingExerciseFromAlert}>
               {alertCopy.primary}
             </button>
             <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={dismissAlert}>
@@ -1493,30 +1706,56 @@ export default function SessionPage() {
           </div>
         </div>
       )}
+
+      {breathingExercise && (
+        <BreathingExerciseWidget
+          key={breathingExercise.startedAt}
+          request={breathingExercise}
+          liveGuide={guide}
+          onClose={() => setBreathingExercise(null)}
+        />
+      )}
     </div>
   );
 }
 
-// Soft synthesized chime — no audio asset needed. Two tones for zone_out
-// (per the "still with it?" nudge), a softer single tone for spiral (the
-// calming loop shouldn't start with anything jarring).
+// Soft synthesized chime - no audio asset needed. The audio context is
+// resumed from user gestures where possible so later real alerts can sound.
 let audioCtx: AudioContext | null = null;
-function playChime(type: "zone_out" | "spiral"): void {
+function getAudioContext(): AudioContext | null {
   try {
     if (!audioCtx) audioCtx = new AudioContext();
-    if (audioCtx.state === "suspended") void audioCtx.resume();
-    const ctx = audioCtx;
+    return audioCtx;
+  } catch {
+    return null;
+  }
+}
+
+async function primeChime(): Promise<void> {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    await ctx.resume().catch(() => undefined);
+  }
+}
+
+async function playChime(type: "zone_out" | "spiral"): Promise<void> {
+  try {
+    await primeChime();
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const activeCtx = ctx;
     const now = ctx.currentTime;
 
     function tone(freq: number, start: number, duration: number, peakGain: number) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const osc = activeCtx.createOscillator();
+      const gain = activeCtx.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0, now + start);
       gain.gain.linearRampToValueAtTime(peakGain, now + start + 0.05);
       gain.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
-      osc.connect(gain).connect(ctx.destination);
+      osc.connect(gain).connect(activeCtx.destination);
       osc.start(now + start);
       osc.stop(now + start + duration + 0.05);
     }

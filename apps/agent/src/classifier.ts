@@ -15,7 +15,8 @@ export interface ClassifierCallbacks {
  * Zone-out rule: blink-rate-change (derived > baseline*1.4) + head stillness
  * + HRV/EDA arousal drop + study app context + not-talking, sustained 90s.
  *
- * Spiral rule: arousal climbing (elevated HR, reduced HRV, increased EDA), sustained 30s.
+ * Spiral rule: arousal climbing (elevated HR, high breathing, reduced HRV,
+ * increased EDA), sustained 30s.
  */
 export class Classifier {
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -107,6 +108,7 @@ export class Classifier {
     // Compute current metrics
     const avgHrv = avg(samples.map((s) => s.hrv_ms).filter(notNull));
     const avgPulse = avg(samples.map((s) => s.pulse_bpm).filter(notNull));
+    const avgBreathing = avg(samples.map((s) => s.breathing_rpm).filter(notNull));
     const avgEda = avg(samples.map((s) => s.eda_us).filter(notNull));
     const isTalking = samples.some(
       (s) => s.talking === DetectionStatus.Detected
@@ -119,7 +121,7 @@ export class Classifier {
 
     // Check spiral conditions
     const spiralReasons = this.checkSpiral(
-      avgPulse, avgHrv, avgEda, th
+      avgPulse, avgBreathing, avgHrv, avgEda, th
     );
 
     if (zoneOutReasons.length > 0) {
@@ -210,6 +212,7 @@ export class Classifier {
 
   private checkSpiral(
     avgPulse: number,
+    avgBreathing: number,
     avgHrv: number,
     avgEda: number,
     th: ReturnType<typeof getThresholds>
@@ -220,6 +223,9 @@ export class Classifier {
     if (avgPulse > this.baseline.pulse + sp.hr_elevation_bpm) {
       reasons.push("elevated_heart_rate");
     }
+    if (avgBreathing > sp.breathing_high_rpm) {
+      reasons.push("high_breathing_rate");
+    }
     if (avgHrv > 0 && avgHrv < this.baseline.hrv * (1 - sp.hrv_drop_fraction)) {
       reasons.push("reduced_hrv");
     }
@@ -227,8 +233,9 @@ export class Classifier {
       reasons.push("increased_eda");
     }
 
-    // Need at least 2 signals for spiral
-    return reasons.length >= 2 ? reasons : [];
+    // High breathing alone is actionable enough for the breathing-loop
+    // notification; other spiral evidence still needs two signals.
+    return reasons.includes("high_breathing_rate") || reasons.length >= 2 ? reasons : [];
   }
 
   private isHeadStill(

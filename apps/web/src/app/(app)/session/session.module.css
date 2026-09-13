@@ -237,6 +237,110 @@
 .alertBody { font-size: 13.5px; line-height: 1.5; color: var(--body); max-width: 42ch; margin-bottom: var(--s4); }
 .alertActions { display: flex; gap: var(--s2); flex-wrap: wrap; }
 
+/* ── Breathing exercise popup ───────────────────────────────────── */
+.breathingBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s5);
+  background: oklch(0.22 0.028 268 / 0.42);
+  backdrop-filter: blur(10px);
+}
+.breathingWidget {
+  width: min(640px, calc(100vw - 2 * var(--s5)));
+  max-height: calc(100vh - 2 * var(--s5));
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--raise);
+  box-shadow: 0 2px 4px oklch(0.22 0.028 268 / 0.08), 0 28px 80px oklch(0.22 0.028 268 / 0.24);
+  padding: var(--s6);
+}
+.breathingTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+.breathingKicker {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--spiral-ink);
+  margin-bottom: var(--s2);
+}
+.breathingTitle {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.breathingClose {
+  flex: none;
+  margin-top: -4px;
+}
+.breathingLead {
+  max-width: 46ch;
+  margin: var(--s3) 0 var(--s5);
+  color: var(--body);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.breathingCenter {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s6);
+}
+.breathingReadout {
+  min-width: 0;
+}
+.breathingPhase {
+  font-size: 17px;
+  color: var(--body);
+  margin-bottom: var(--s2);
+}
+.breathingTimer {
+  font-size: 62px;
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: 0;
+}
+.breathingSubtimer {
+  margin-top: var(--s2);
+  font-size: 12px;
+  color: var(--mute);
+}
+.breathingFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line-soft);
+}
+.breathingMetric {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--mute);
+  background: var(--sink);
+  border-radius: var(--r-pill);
+  padding: 5px 9px;
+}
+
+@media (max-width: 700px) {
+  .breathingWidget { padding: var(--s5); }
+  .breathingCenter {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: var(--s4);
+  }
+  .breathingReadout { text-align: center; }
+  .breathingTimer { font-size: 52px; }
+}
+
 /* ── Breathing pacer ────────────────────────────────────────────────
    Two rhythms that must never be mistaken for each other (see the design
    handoff README's "Breathing pacer" spec). The core disc's size is driven
@@ -250,8 +354,10 @@
    check) — the label's "in 4" / "out 8" text always carries the phase and
    count regardless of motion preference. */
 .pacerWrap { width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; position: relative; }
-.pacerCore { position: relative; border-radius: 50%; transition: width var(--dur-3) linear, height var(--dur-3) linear; }
+.pacerWrap[data-size="large"] { width: 290px; height: 290px; }
+.pacerCore { position: relative; z-index: 1; border-radius: 50%; transition: width var(--dur-3) linear, height var(--dur-3) linear; }
 .pacerLabel { font-family: var(--mono); font-size: 10px; z-index: 1; position: absolute; }
+.pacerWrap[data-size="large"] .pacerLabel { font-size: 18px; }
 
 .pacerGhost, .pacerRingA, .pacerRingB {
   position: absolute;
@@ -264,6 +370,12 @@
 .pacerGhost { border: 1.5px solid var(--zoned); animation: pacer-ghost 8s ease-in-out infinite; }
 .pacerRingA, .pacerRingB { background: var(--zoned-pale); animation: pacer-ping 8s ease-in-out infinite; }
 .pacerRingB { animation-delay: -4s; }
+.pacerWrap[data-size="large"] .pacerGhost,
+.pacerWrap[data-size="large"] .pacerRingA,
+.pacerWrap[data-size="large"] .pacerRingB {
+  width: 76px;
+  height: 76px;
+}
 
 .pacerArc {
   position: absolute;
@@ -276,6 +388,11 @@
   border-top-color: var(--spiral);
   border-left-color: var(--spiral);
   animation: pacer-spin 12s linear infinite;
+}
+.pacerWrap[data-size="large"] .pacerArc {
+  width: 248px;
+  height: 248px;
+  border-width: 5px;
 }
 
 @keyframes pacer-ghost {

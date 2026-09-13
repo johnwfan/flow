@@ -11,6 +11,7 @@
   },
   "spiral": {
     "hr_elevation_bpm": 10,
+    "breathing_high_rpm": 20,
     "hrv_drop_fraction": 0.2,
     "eda_rise_fraction": 0.3,
     "sustain_s": 30
