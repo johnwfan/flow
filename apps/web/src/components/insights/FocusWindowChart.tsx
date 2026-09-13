@@ -58,7 +58,17 @@ function focusNote(data: FocusWindow, sessions: number, hasEnough: boolean): str
     return `Not enough sessions with a clear drop-off yet -- ${sessions} of ${MIN_SESSIONS_FOR_PATTERN} needed before this trend means anything.`;
   }
   const m = data.medianMinutes;
-  return `Your attention holds about ${m} minute${m === 1 ? "" : "s"} before the first real drop, based on ${sessions} session${sessions === 1 ? "" : "s"}. Consider ending a block a little before that point rather than pushing past it.`;
+  // The curve's raw last point can be noisy (very few sessions run that long,
+  // so one still-focused outlier can spike it back up) -- the lowest point
+  // after the median is a more honest "here's the real cost" figure than
+  // whatever the tail happens to land on.
+  const pointsAfterMedian = data.decayCurve.filter((d) => d.minute > m);
+  const worst = pointsAfterMedian.reduce<(typeof pointsAfterMedian)[number] | null>(
+    (min, d) => (min === null || d.pctStillFocused < min.pctStillFocused ? d : min),
+    null,
+  );
+  const tailNote = worst ? ` By minute ${worst.minute}, focus has dropped to ${worst.pctStillFocused}%.` : "";
+  return `Your attention holds about ${m} minute${m === 1 ? "" : "s"} before the first real drop, based on ${sessions} session${sessions === 1 ? "" : "s"}.${tailNote} Consider ending a block a little before that point rather than pushing past it.`;
 }
 
 export function FocusWindowChart({ data, sessionCount }: { data: FocusWindow; sessionCount: number }) {
