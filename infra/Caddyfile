@@ -1,0 +1,16 @@
+tryflow.study {
+	handle /v1/* {
+		reverse_proxy app:3001
+	}
+
+	# Future: the Lane-A agent's WebSocket server. No such service exists in
+	# docker-compose.yml yet (the agent runs client-side, per the PRD) — this
+	# route is a placeholder until that changes.
+	handle /ws/* {
+		reverse_proxy app:8765
+	}
+
+	handle {
+		reverse_proxy app:3000
+	}
+}
