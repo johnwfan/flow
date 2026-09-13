@@ -22,17 +22,9 @@
   justify-self: start;
   display: flex;
   align-items: center;
-  gap: 10px;
   border: none;
   background: transparent;
   padding: 8px 0;
-}
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--indigo);
-  flex: none;
 }
 .markLabel {
   font-size: 18px;
@@ -59,8 +51,38 @@
   color: var(--mute);
   transition: color var(--dur-1) var(--ease);
 }
-.navLink:hover {
+.navLink:hover,
+.navLink:focus-visible {
   color: var(--ink);
+}
+.navLink:focus-visible {
+  outline: 2px solid var(--deep);
+  outline-offset: -3px;
+  border-radius: var(--r-sm);
+}
+.navClip {
+  display: block;
+  height: 20px;
+  overflow: hidden;
+}
+.navLabel {
+  position: relative;
+  display: block;
+  line-height: 20px;
+  transition: transform var(--dur-2) var(--ease);
+  will-change: transform;
+}
+.navLabel::after {
+  content: attr(data-label);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  color: var(--ink);
+}
+.navLink:hover .navLabel,
+.navLink:focus-visible .navLabel {
+  transform: translateY(-100%);
 }
 
 .right {
@@ -70,6 +92,9 @@
   gap: var(--s4);
 }
 .cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: 9px 20px;
   border: none;
   border-radius: var(--r-pill);
@@ -81,6 +106,60 @@
   color: oklch(1 0 0);
   box-shadow: var(--shadow-primary);
 }
-.cta:hover {
+.cta::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: -80%;
+  bottom: -80%;
+  left: -55%;
+  width: 42%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.48), transparent);
+  transform: skewX(-20deg) translateX(0);
+  transition: transform 680ms var(--ease);
+}
+.cta:hover,
+.cta:focus-visible {
   background: var(--indigo-hi);
+  color: oklch(1 0 0);
+}
+.cta:hover::after,
+.cta:focus-visible::after {
+  transform: skewX(-20deg) translateX(410%);
+}
+.cta:focus-visible {
+  outline: 3px solid oklch(0.5 0.24 258 / 0.25);
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  .inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0 20px;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .right {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navLabel {
+    transition: none;
+  }
+
+  .navLabel::after,
+  .cta::after {
+    display: none;
+  }
+
+  .navLink:hover .navLabel,
+  .navLink:focus-visible .navLabel {
+    transform: none;
+  }
 }

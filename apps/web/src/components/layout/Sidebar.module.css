@@ -21,18 +21,10 @@
 .mark {
   display: flex;
   align-items: center;
-  gap: 10px;
   border: none;
   background: transparent;
   padding: 6px 8px;
   align-self: flex-start;
-}
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--indigo);
-  flex: none;
 }
 .markLabel {
   font-size: 18px;

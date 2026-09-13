@@ -13,14 +13,17 @@ export function MarketingNav() {
     <div className={styles.bar}>
       <div className={styles.inner}>
         <Link href="/" className={styles.mark}>
-          <span className={styles.dot} />
           <span className={styles.markLabel}>Flow</span>
         </Link>
 
         <nav className={styles.nav}>
           {SECTION_LINKS.map((link) => (
             <a key={link.href} href={link.href} className={styles.navLink}>
-              {link.label}
+              <span className={styles.navClip}>
+                <span className={styles.navLabel} data-label={link.label}>
+                  {link.label}
+                </span>
+              </span>
             </a>
           ))}
         </nav>

@@ -32,7 +32,6 @@ export function Sidebar() {
   return (
     <aside className={styles.side}>
       <Link href="/" className={styles.mark}>
-        <span className={styles.dot} />
         <span className={styles.markLabel}>Flow</span>
       </Link>
 

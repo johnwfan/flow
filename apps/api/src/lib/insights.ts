@@ -62,6 +62,39 @@ export async function computeFocusWindow(pool: Pool, deviceId?: string): Promise
   return { medianMinutes, decayCurve };
 }
 
+export interface SessionFocusPoint {
+  sessionId: string;
+  startedAt: string;
+  pctFocused: number;
+}
+
+/**
+ * One point per session: its start time and overall focused-%. Deliberately
+ * NOT bucketed into dayparts here -- the API server's clock/timezone isn't
+ * necessarily the user's, so time-of-day bucketing happens client-side from
+ * each startedAt's browser-local hour (same pattern as computeSettleTrend
+ * shipping raw per-session points for the frontend to render).
+ */
+export async function computeFocusByTime(pool: Pool, deviceId?: string): Promise<SessionFocusPoint[]> {
+  const { clause, params } = deviceFilter(deviceId);
+  const result = await pool.query<{ id: string; started_at: Date; pct_focused: string | null }>(
+    `SELECT s.id, s.started_at,
+            count(*) FILTER (WHERE m.state = $${params.length + 1})::float / NULLIF(count(*), 0) * 100 AS pct_focused
+     FROM sessions s
+     JOIN samples_1min m ON m.session_id = s.id
+     ${clause}
+     GROUP BY s.id, s.started_at`,
+    [...params, State.Focused],
+  );
+  return result.rows
+    .filter((r) => r.pct_focused !== null)
+    .map((r) => ({
+      sessionId: r.id,
+      startedAt: r.started_at.toISOString(),
+      pctFocused: Math.round(Number(r.pct_focused)),
+    }));
+}
+
 export interface CategoryEffort {
   category: string;
   minutes: number;

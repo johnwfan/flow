@@ -141,6 +141,7 @@ export interface CrossSessionDistractionPattern {
   category: string | null;
   minutes: number;
   episodes: number;
+  avgMinutesPerEpisode: number;
 }
 
 interface DistractedBucketRow {
@@ -191,7 +192,7 @@ export async function computeCrossSessionDistractionPattern(
     deviceId ? [deviceId] : [],
   );
 
-  const byKey = new Map<string, CrossSessionDistractionPattern>();
+  const byKey = new Map<string, Omit<CrossSessionDistractionPattern, "avgMinutesPerEpisode">>();
 
   for (const session of sessionResult.rows) {
     const buckets = await pool.query<DistractedBucketRow>(
@@ -226,8 +227,12 @@ export async function computeCrossSessionDistractionPattern(
   }
 
   return [...byKey.values()]
-    .map((p) => ({ ...p, minutes: Math.round(p.minutes * 10) / 10 }))
-    .sort((a, b) => b.minutes - a.minutes);
+    .map((p) => ({
+      ...p,
+      minutes: Math.round(p.minutes * 10) / 10,
+      avgMinutesPerEpisode: Math.round((p.minutes / p.episodes) * 10) / 10,
+    }))
+    .sort((a, b) => b.avgMinutesPerEpisode - a.avgMinutesPerEpisode);
 }
 
 function buildTipsPrompt(

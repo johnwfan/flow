@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import {
   computeBreakQuality,
   computeEffortByCategory,
+  computeFocusByTime,
   computeFocusWindow,
   computeInterventionEfficacy,
   computeSettleTrend,
@@ -15,6 +16,7 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
 
     const [
       focusWindow,
+      focusByTime,
       effortByCategory,
       settleTrend,
       breakQuality,
@@ -23,6 +25,7 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       distractionPatterns,
     ] = await Promise.all([
       computeFocusWindow(app.pg, deviceId),
+      computeFocusByTime(app.pg, deviceId),
       computeEffortByCategory(app.pg, deviceId),
       computeSettleTrend(app.pg, deviceId),
       computeBreakQuality(app.pg, deviceId),
@@ -33,6 +36,7 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
 
     return {
       focusWindow,
+      focusByTime,
       effortByCategory,
       settleTrend,
       breakQuality,

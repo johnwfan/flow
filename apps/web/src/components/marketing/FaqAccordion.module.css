@@ -1,14 +1,17 @@
 .item {
-  padding: var(--s4) var(--s3);
   margin: 0 calc(var(--s3) * -1);
   border-top: 1px solid var(--line-soft);
-  cursor: pointer;
   transition: background var(--dur-1) var(--ease);
-  background: transparent;
   width: calc(100% + var(--s3) * 2);
+}
+.trigger {
+  width: 100%;
+  padding: var(--s4) var(--s3);
   border-left: none;
   border-right: none;
   border-bottom: none;
+  border-top: none;
+  background: transparent;
   text-align: left;
   display: block;
   font: inherit;
@@ -16,6 +19,9 @@
 }
 .item:hover {
   background: var(--sink);
+}
+.trigger:disabled {
+  cursor: default;
 }
 .row {
   display: flex;
@@ -29,13 +35,58 @@
   letter-spacing: -0.02em;
 }
 .sign {
-  font-family: var(--mono);
-  font-size: 14px;
-  color: var(--tick);
+  position: relative;
+  width: 14px;
+  height: 14px;
   flex: none;
 }
+.sign::before,
+.sign::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 1px;
+  background: var(--tick);
+  transform: translate(-50%, -50%);
+  transition: transform var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.sign::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.sign[data-open="true"]::before {
+  background: var(--ink);
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+.sign[data-open="true"]::after {
+  background: var(--ink);
+  transform: translate(-50%, -50%) rotate(180deg) scaleX(0);
+}
+.answerReveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  padding: 0 var(--s3);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    grid-template-rows 380ms var(--ease),
+    opacity 240ms var(--ease),
+    transform 380ms var(--ease);
+}
+.answerReveal[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+}
+.answerClip {
+  display: block;
+  min-height: 0;
+  overflow: hidden;
+}
 .answer {
-  margin-top: 10px;
+  display: block;
+  padding-bottom: var(--s4);
   font-size: 14px;
   line-height: 1.6;
   color: var(--body);
@@ -43,4 +94,12 @@
 }
 .closingRule {
   border-top: 1px solid var(--line-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign::before,
+  .sign::after,
+  .answerReveal {
+    transition: none;
+  }
 }

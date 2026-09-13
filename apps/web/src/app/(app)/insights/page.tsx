@@ -1,6 +1,7 @@
 import { getInsights } from "@/lib/api";
 import { Section } from "@/components/marketing/Section";
 import { FocusWindowChart } from "@/components/insights/FocusWindowChart";
+import { DaypartFocusChart } from "@/components/insights/DaypartFocusChart";
 import { CategoryEffortChart } from "@/components/insights/CategoryEffortChart";
 import { DistractionPatternChart } from "@/components/insights/DistractionPatternChart";
 import { SettleTrendChart } from "@/components/insights/SettleTrendChart";
@@ -29,13 +30,17 @@ export default async function InsightsPage() {
         <FocusWindowChart data={insights.focusWindow} sessionCount={sessions} />
       </Section>
 
+      <Section title="Focus by time of day" description="When focus tends to hold up, and when it doesn't.">
+        <DaypartFocusChart data={insights.focusByTime} sessionCount={sessions} />
+      </Section>
+
       <Section title="Effort by app" description="Where the deep-work minutes actually went.">
         <CategoryEffortChart data={insights.effortByCategory} sessionCount={sessions} />
       </Section>
 
       <Section
-        title="Where distraction concentrates"
-        description="Same signal as effort by app, but for the drift -- every zoned-out and spiraling minute, ranked by what was on screen."
+        title="Re-focus cost by app"
+        description="Ranked by how long it takes to get back to deep work after opening each one -- not total time lost, but the price of a single check."
       >
         <DistractionPatternChart data={insights.distractionPatterns} sessionCount={sessions} />
       </Section>

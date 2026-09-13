@@ -70,6 +70,12 @@ export interface FocusWindow {
   decayCurve: { minute: number; pctStillFocused: number }[];
 }
 
+export interface SessionFocusPoint {
+  sessionId: string;
+  startedAt: string;
+  pctFocused: number;
+}
+
 export interface CategoryEffort {
   category: string;
   minutes: number;
@@ -104,10 +110,12 @@ export interface DistractionPattern {
   category: string | null;
   minutes: number;
   episodes: number;
+  avgMinutesPerEpisode: number;
 }
 
 export interface Insights {
   focusWindow: FocusWindow;
+  focusByTime: SessionFocusPoint[];
   effortByCategory: CategoryEffort[];
   settleTrend: SettlePoint[];
   breakQuality: BreakQuality;
